@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/*
+  Paleta pensada para operador que fica horas olhando pra isso: fundo escuro
+  frio (não preto puro), um azul-ciano como acento primário e um âmbar como
+  contraponto quente — o par serve pra distinguir 2 séries em gráfico sem
+  recorrer a vermelho/verde (que aqui carregam significado de status, não
+  de categoria). Números de KPI usam fonte monoespaçada com tabular-nums:
+  o projeto inteiro foi construído em torno de "o número tem que estar
+  certo" — a tipografia do valor precisa comunicar isso à primeira vista,
+  como um terminal financeiro, não como um card de app genérico.
+*/
+@theme {
+  --color-canvas: #0b0e13;
+  --color-surface: #12161d;
+  --color-surface-hover: #171c25;
+  --color-hairline: #232933;
+  --color-ink: #e8ecf1;
+  --color-muted: #8593a6;
+  --color-faint: #5b6675;
+  --color-accent: #4c9aff;
+  --color-accent-warm: #f2a65a;
+  --color-good: #3dbe79;
+  --color-bad: #e5675a;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-feature-settings: "cv11", "ss01";
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

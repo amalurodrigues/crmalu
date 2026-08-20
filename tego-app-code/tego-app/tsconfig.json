@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@tego/db": ["packages/db/src"],
+      "@tego/metrics": ["packages/metrics/src"],
+      "@tego/csv-import": ["packages/csv-import/src"]
+    }
+  }
+}
