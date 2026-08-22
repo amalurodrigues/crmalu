@@ -1,1 +1,11 @@
-{ "name": "@tego/csv-import", "version": "0.0.1", "type": "module", "main": "src/index.ts" }
+{
+  "name": "@tego/csv-import",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@tego/db": "*",
+    "csv-parse": "^7.0.2",
+    "drizzle-orm": "^0.45.2"
+  }
+}

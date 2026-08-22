@@ -1,1 +1,10 @@
-{ "name": "@tego/db", "version": "0.0.1", "type": "module", "main": "src/client.ts" }
+{
+  "name": "@tego/db",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/client.ts",
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0"
+  }
+}
