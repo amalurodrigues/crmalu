@@ -33,6 +33,7 @@ import {
   METRICS,
   METRIC_FORMAT,
   METRIC_LABELS,
+  type DeliveryStatus,
   type DimensionKey,
   type MetricKey,
   type ReportPayload,
@@ -77,6 +78,30 @@ function longDate(iso: string) {
 }
 
 // ------------------------------------------------------------------ pedaços
+
+/**
+ * Estado de veiculação. Cor aqui é ESTADO binário (rodando / parado), não
+ * julgamento de desempenho — pausar um criativo ruim é acerto, não problema.
+ * Por isso vem acompanhada de `title`: docs/06 § 6 não aceita cor como único
+ * portador de informação, e daltonismo vermelho-verde é o mais comum que existe.
+ */
+function StatusDot({ status }: { status: DeliveryStatus | null }) {
+  if (!status) return null;
+  const cfg = {
+    active: { cor: "var(--color-good)", texto: "Veiculando" },
+    inactive: { cor: "var(--color-bad)", texto: "Pausado" },
+    misto: { cor: "var(--color-accent-warm)", texto: "Misto — parte veiculando, parte pausada" },
+  }[status];
+
+  return (
+    <span
+      title={cfg.texto}
+      aria-label={cfg.texto}
+      className="inline-block h-2 w-2 shrink-0 cursor-help rounded-full"
+      style={{ background: cfg.cor, boxShadow: `0 0 0 2px color-mix(in srgb, ${cfg.cor} 22%, transparent)` }}
+    />
+  );
+}
 
 function SampleBadge({ level, reason }: { level: string; reason: string }) {
   if (level === "ok") return null;
@@ -676,6 +701,7 @@ export function ReportDashboard({
                       className="h-1.5 w-1.5 shrink-0 rounded-full"
                       style={{ background: colorFor(r.key) }}
                     />
+                    <StatusDot status={r.status} />
                     <span className="truncate">{r.key}</span>
                     <SampleBadge level={r.sample.level} reason={r.sample.reason} />
                   </div>

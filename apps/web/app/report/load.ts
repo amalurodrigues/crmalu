@@ -262,9 +262,17 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
   for (const dimension of DIMENSIONS) {
     const totalsByKey = new Map<string, RawTotals>();
     const totalsByDateKey = new Map<string, Map<string, RawTotals>>();
+    /** estados de veiculação que contribuem para cada chave */
+    const statusesByKey = new Map<string, Set<string>>();
 
     for (const cell of cells) {
       const key = dimensionValue(cell.entityId, dimension);
+
+      const st = entityById.get(cell.entityId)?.status;
+      if (st) {
+        if (!statusesByKey.has(key)) statusesByKey.set(key, new Set());
+        statusesByKey.get(key)!.add(st);
+      }
 
       totalsByKey.set(key, sumTotals([totalsByKey.get(key) ?? EMPTY, cell.totals]));
 
@@ -301,11 +309,22 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
 
     const rows = keys.map((key) => {
       const totals = totalsByKey.get(key)!;
+      const sts = statusesByKey.get(key);
+      const status =
+        !sts || sts.size === 0
+          ? null
+          : sts.size > 1
+            ? ("misto" as const)
+            : sts.has("active")
+              ? ("active" as const)
+              : ("inactive" as const);
+
       return {
         key,
         totals,
         metrics: computeMetrics(totals),
         sample: sampleVerdict(totals, periodDays),
+        status,
       };
     });
 

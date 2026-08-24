@@ -52,11 +52,20 @@ export const METRIC_FORMAT: Record<MetricKey, "money" | "count"> = {
   cpa: "money",
 };
 
+/** Estado de veiculação agregado de uma linha de quebra. */
+export type DeliveryStatus = "active" | "inactive" | "misto";
+
 export interface BreakdownRow {
   key: string;
   totals: RawTotals;
   metrics: DerivedMetrics;
   sample: SampleVerdict;
+  /**
+   * `misto` aparece quando a linha agrega entidades em estados diferentes —
+   * um conjunto com metade dos criativos pausados, por exemplo. Colapsar isso
+   * para "ativo" esconderia que metade da verba parou.
+   */
+  status: DeliveryStatus | null;
 }
 
 /** Um ponto por data; as chaves restantes são os valores de cada série. */

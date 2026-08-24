@@ -154,6 +154,17 @@ export function PrintReport({
                 {slice.rows.map((r) => (
                   <tr key={r.key}>
                     <td>
+                      {/* no papel o estado vai em palavra, não em cor: cor
+                          impressa em cinza não distingue verde de vermelho */}
+                      {r.status && (
+                        <span className="mr-1.5 text-[8px] uppercase text-[#5b6675]">
+                          {r.status === "active"
+                            ? "▶ veiculando"
+                            : r.status === "inactive"
+                              ? "■ pausado"
+                              : "◆ misto"}
+                        </span>
+                      )}
                       {r.key}
                       {r.sample.level !== "ok" && (
                         <span className="ml-1.5 text-[8px] uppercase text-[#8a7326]">
