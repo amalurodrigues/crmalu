@@ -1,55 +1,79 @@
 @import "tailwindcss";
 
 /*
-  Paleta pensada para operador que fica horas olhando pra isso: fundo escuro
-  frio (não preto puro), um azul-ciano como acento primário e um âmbar como
-  contraponto quente — o par serve pra distinguir 2 séries em gráfico sem
-  recorrer a vermelho/verde (que aqui carregam significado de status, não
-  de categoria).
+  SISTEMA DE SUPERFÍCIE — tema escuro tratado como contexto próprio, não como
+  variante do claro.
 
-  Tipografia em três papéis, não dois:
-    display (League Spartan) — títulos e rótulos de KPI, geométrica e pesada
+  Profundidade em tema escuro vem de LUMINÂNCIA, não de sombra: sombra não lê
+  sobre fundo escuro, e o que o olho interpreta como "mais perto" é a superfície
+  mais clara. Daí a escada de quatro níveis, cada um alguns pontos percentuais
+  mais claro que o anterior:
+
+    canvas    fundo da página — nada fica atrás disto
+    surface   card, painel, barra lateral
+    surface-2 aninhado dentro de card, estado hover, linha de tabela ativa
+    surface-3 sobreposto a tudo — select aberto, tooltip, modal
+
+  O fundo não é preto puro de propósito: #000 provoca halação (o texto claro
+  "sangra" na retina) e destrói a escada de elevação, porque não existe nível
+  abaixo dele.
+
+  Um acento saturado só, num sistema dessaturado ao redor: azul carrega ação e
+  identidade; verde e vermelho ficam reservados para polaridade de status e
+  nunca para categoria — senão "subiu" e "categoria 2" viram a mesma cor.
+
+  Tipografia em três papéis:
+    display (League Spartan) — títulos e rótulos, geométrica e pesada
     sans (Montserrat)        — texto corrido e UI
     mono                     — TODO número.
 
-  O mono nos números não é enfeite herdado: o projeto inteiro foi construído
-  em torno de "o número tem que estar certo", e tabular-nums mantém a coluna
-  alinhada dígito a dígito. Trocar por Montserrat nos valores faria 248,75 e
-  115,00 desalinharem na tabela. Display e sans mudam; o número não.
+  O mono nos números não é herança: o projeto foi construído em torno de "o
+  número tem que estar certo", e tabular-nums mantém a coluna alinhada dígito a
+  dígito. Trocar por Montserrat nos valores desalinharia 248,75 e 115,00 na
+  mesma coluna.
 */
 @theme {
   --color-canvas: #0a0d12;
-  --color-surface: #12161d;
-  --color-surface-hover: #171c25;
-  --color-hairline: #232933;
-  --color-ink: #e8ecf1;
-  --color-muted: #8593a6;
-  --color-faint: #5b6675;
+  --color-surface: #141922;
+  --color-surface-2: #1b212c;
+  --color-surface-3: #232a36;
+  --color-surface-hover: #1b212c;
+  --color-hairline: #2a3240;
+
+  --color-ink: #eef2f7;
+  --color-muted: #93a1b5;
+  --color-faint: #7d8b9f;
+
   --color-accent: #4c9aff;
   --color-accent-warm: #f2a65a;
   --color-good: #3dbe79;
   --color-bad: #e5675a;
 
-  /* as variáveis --font-league-spartan e --font-montserrat vêm de next/font,
-     aplicadas no <html> por layout.tsx; o fallback cobre o flash inicial */
+  /* --font-league-spartan e --font-montserrat vêm de next/font, aplicadas no
+     <html> por layout.tsx; o fallback cobre o primeiro paint */
   --font-display: var(--font-league-spartan), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 }
 
 /*
-  Profundidade do fundo: dois halos radiais frios em cantos opostos, mais um
-  grão fino por cima. O grão existe para matar o banding — gradiente escuro de
-  larga extensão vira faixas visíveis em painel de 8 bits, e o ruído dissolve
-  a transição. `background-attachment: fixed` mantém os halos parados enquanto
-  a página rola, para o fundo ler como ambiente e não como conteúdo.
+  Fundo: dois halos frios em cantos opostos, uma vinheta que fecha as bordas e
+  um grão fino por cima.
+
+  O grão não é decoração — gradiente escuro de larga extensão produz banding
+  visível (faixas) em painel de 8 bits, e o ruído dissolve a transição. A
+  vinheta empurra o olho para o centro, onde ficam os números.
+
+  `background-attachment: fixed` mantém os halos parados enquanto a página rola:
+  fundo que rola junto lê como conteúdo, fundo parado lê como ambiente.
 */
 body {
   background-color: var(--color-canvas);
   background-image:
-    radial-gradient(900px 600px at 12% -8%, rgba(76, 154, 255, 0.10), transparent 60%),
-    radial-gradient(760px 520px at 100% 8%, rgba(124, 92, 255, 0.08), transparent 62%),
-    radial-gradient(600px 600px at 50% 110%, rgba(45, 212, 191, 0.05), transparent 65%);
+    radial-gradient(900px 620px at 10% -10%, rgba(76, 154, 255, 0.11), transparent 62%),
+    radial-gradient(780px 540px at 102% 4%, rgba(124, 92, 255, 0.085), transparent 64%),
+    radial-gradient(620px 620px at 50% 112%, rgba(45, 212, 191, 0.055), transparent 66%),
+    radial-gradient(1400px 900px at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.45));
   background-attachment: fixed;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
@@ -61,9 +85,9 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.5;
-  /* ruído gerado por feTurbulence — data-URI, sem requisição de rede (CSP) */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  opacity: 0.55;
+  /* ruído por feTurbulence, embutido como data-URI — sem requisição de rede */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
 }
 
 .tabular {
@@ -72,39 +96,59 @@ body::before {
 }
 
 /*
-  Vidro. Usado só onde há hierarquia a comunicar — cartão de KPI, botão de
-  cliente, barra de cabeçalho. `backdrop-filter` força uma nova camada de
-  composição por elemento; espalhar isto por tabela ou linha de gráfico custa
-  frame e não comunica nada.
+  VIDRO
 
-  A borda tem duas partes: o traço externo translúcido e um `inset` claro no
-  topo. É o inset que produz a leitura de "placa de vidro com luz batendo em
-  cima" — sem ele o efeito lê como um retângulo cinza desfocado.
+  Três camadas empilhadas num único `background`, sem pseudo-elemento — pseudo
+  posicionado pintaria por cima dos filhos e engoliria o conteúdo do card:
+
+    1. varredura especular diagonal — é ela que dá a leitura de "placa", e não
+       o desfoque; sem ela o efeito lê como retângulo cinza borrado
+    2. gradiente de face, mais claro no topo, como luz batendo de cima
+    3. BASE QUASE OPACA da cor de superfície
+
+  A camada 3 é o ponto de acessibilidade. Vidro puramente translúcido faz o
+  contraste do texto variar conforme o que passa atrás — um card sobre o halo
+  azul e o mesmo card sobre o fundo neutro têm contraste diferente, e um deles
+  vai falhar. Com a base opaca, o contraste é estável e previsível onde quer que
+  o card caia na página; o desfoque vira acabamento, não estrutura.
+
+  Desfoque alto (28px) porque o fundo tem gradiente e grão: desfoque baixo sobre
+  fundo complexo deixa passar detalhe que compete com o texto.
 */
 .glass {
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.055) 0%,
-    rgba(255, 255, 255, 0.022) 42%,
-    rgba(255, 255, 255, 0.012) 100%
-  );
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(105deg, transparent 26%, rgba(255, 255, 255, 0.05) 43%, transparent 60%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 52%),
+    color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.085);
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
-    0 12px 32px -18px rgba(0, 0, 0, 0.9);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.3),
+    0 18px 44px -26px rgba(0, 0, 0, 0.95);
+}
+
+/** Nível 2: aninhado dentro de um card de vidro. Mais claro = mais perto. */
+.glass-2 {
+  background: color-mix(in srgb, var(--color-surface-2) 92%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.625rem;
 }
 
 .glass-hover {
-  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 .glass-hover:hover {
-  border-color: rgba(76, 154, 255, 0.35);
+  border-color: rgba(76, 154, 255, 0.4);
   transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
-    0 18px 40px -20px rgba(0, 0, 0, 0.95);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
+    0 26px 52px -28px rgba(0, 0, 0, 1),
+    0 0 0 1px rgba(76, 154, 255, 0.08);
 }
 
 /* Fio de luz no topo de um bloco — separa seções sem desenhar uma régua. */
@@ -117,19 +161,46 @@ body::before {
   inset-inline: 12%;
   top: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(76, 154, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(76, 154, 255, 0.6), transparent);
+}
+
+/*
+  FALLBACK DE ACESSIBILIDADE
+
+  Quem liga "reduzir transparência" no sistema, ou pede mais contraste, recebe
+  superfície opaca e borda sólida. WCAG 2.2 trata isso como preferência a
+  respeitar, não como enfeite opcional — e é justamente quem mais precisa de
+  contraste que liga essa opção.
+*/
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .glass,
+  .glass-2 {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: var(--color-hairline);
+    box-shadow: none;
+  }
+  body {
+    background-image: none;
+  }
+  body::before {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .glass-hover,
   .glass-hover:hover {
     transform: none;
+    transition: none;
   }
 }
 
 /*
-  Impressão: docs/06 exige que o relatório funcione no papel, e o PDF sai de
-  um print desta mesma tela. Vidro e halos viram fundo branco e borda sólida —
-  backdrop-filter não imprime e o gradiente escuro come toner.
+  IMPRESSÃO — o PDF sai de um print desta mesma tela (CLAUDE.md § 4), então
+  vidro, halo e grão precisam virar papel branco. backdrop-filter não imprime e
+  gradiente escuro come toner.
 */
 @page {
   size: A4;
@@ -145,7 +216,6 @@ body::before {
     display: none;
   }
 
-  /* a navegação do painel não existe no papel */
   aside,
   [data-print-hide] {
     display: none !important;
@@ -155,16 +225,8 @@ body::before {
     padding: 0 !important;
   }
 
-  /* docs/05: cards não podem partir no meio da página */
-  .print-block {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .print-page-break {
-    break-before: page;
-    page-break-before: always;
-  }
-  .glass {
+  .glass,
+  .glass-2 {
     background: #fff;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -173,5 +235,14 @@ body::before {
   }
   .edge-glow::after {
     display: none;
+  }
+
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
   }
 }

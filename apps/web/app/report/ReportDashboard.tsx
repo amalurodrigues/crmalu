@@ -84,8 +84,8 @@ function SampleBadge({ level, reason }: { level: string; reason: string }) {
   return (
     <span
       title={reason}
-      className="inline-flex cursor-help items-center gap-1 rounded border border-hairline
-                 bg-canvas px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint"
+      className="glass-2 inline-flex cursor-help items-center gap-1 px-1.5 py-0.5
+                 text-[10px] uppercase tracking-wide text-faint"
     >
       <TriangleAlert size={10} strokeWidth={2} />
       {label}
@@ -113,7 +113,7 @@ function KpiCard({
         <Icon size={13} strokeWidth={1.75} />
         <span className="font-display text-xs font-semibold uppercase tracking-wider">{label}</span>
       </div>
-      <div className="tabular mt-1.5 font-mono text-xl font-medium text-ink">{value}</div>
+      <div className="tabular mt-2 font-mono text-2xl font-medium tracking-tight text-ink">{value}</div>
       {denominator && <div className="mt-1 text-[11px] text-faint">{denominator}</div>}
       {badge && <div className="mt-1.5">{badge}</div>}
     </div>
@@ -132,7 +132,7 @@ function Segmented<T extends string>({
   labels: Record<T, string>;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-hairline bg-canvas p-0.5">
+    <div className="inline-flex rounded-lg border border-white/5 bg-canvas/70 p-0.5">
       {options.map((o) => (
         <button
           key={o}
@@ -140,7 +140,9 @@ function Segmented<T extends string>({
           onClick={() => onChange(o)}
           className={
             "rounded px-2.5 py-1 text-xs transition-colors " +
-            (o === value ? "bg-surface text-ink" : "text-muted hover:text-ink")
+            (o === value
+              ? "bg-surface-2 text-ink shadow-[inset_0_1px_0_rgba(255,255,255,.08)]"
+              : "text-muted hover:text-ink")
           }
         >
           {labels[o]}
@@ -304,7 +306,7 @@ export function ReportDashboard({
     METRIC_FORMAT[metric] === "money" ? money(v, meta.currency) : count(v);
 
   const tooltipStyle = {
-    background: "#12161d",
+    background: CHART_COLORS.overlay,
     border: `1px solid ${CHART_COLORS.hairline}`,
     borderRadius: 8,
     fontSize: 12,
@@ -418,7 +420,7 @@ export function ReportDashboard({
           </a>
           <a
             href="/report/historico"
-            className="inline-flex items-center gap-1.5 rounded-md border border-hairline
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/10
                        px-3 py-1.5 text-xs text-muted transition-colors hover:text-ink"
           >
             <History size={13} strokeWidth={1.75} />
@@ -652,7 +654,7 @@ export function ReportDashboard({
       <div className="glass mt-4 overflow-x-auto rounded-2xl">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-hairline text-left text-xs uppercase tracking-wide text-faint">
+            <tr className="border-b border-white/8 text-left text-xs uppercase tracking-wide text-faint">
               <th className="px-4 py-2.5 font-normal">{DIMENSION_LABELS[dimension]}</th>
               <th className="px-3 py-2.5 text-right font-normal">Gasto</th>
               <th className="px-3 py-2.5 text-right font-normal">Impressões</th>
@@ -667,7 +669,7 @@ export function ReportDashboard({
           </thead>
           <tbody>
             {slice.rows.map((r) => (
-              <tr key={r.key} className="border-b border-hairline last:border-0">
+              <tr key={r.key} className="border-b border-white/5 last:border-0 transition-colors hover:bg-white/[0.03]">
                 <td className="px-4 py-2.5 text-ink">
                   <div className="flex items-center gap-2">
                     <span
@@ -718,7 +720,7 @@ export function ReportDashboard({
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t border-hairline font-medium">
+            <tr className="border-t border-white/10 font-medium">
               <td className="px-4 py-2.5 text-ink">Total</td>
               <td className="tabular px-3 py-2.5 text-right font-mono text-ink">
                 {money(headline.totals.spend, meta.currency)}

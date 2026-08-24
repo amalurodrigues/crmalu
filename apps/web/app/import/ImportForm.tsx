@@ -21,7 +21,7 @@ export function ImportForm() {
       <form action={handleSubmit}>
         <label
           htmlFor="file"
-          className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-hairline bg-surface px-6 py-10 text-center transition-colors hover:border-accent/50"
+          className="flex cursor-pointer flex-col items-center gap-2 glass-2 rounded-xl border-dashed px-6 py-10 text-center transition-colors hover:border-accent/50"
         >
           <UploadCloud size={22} className="text-faint" strokeWidth={1.5} />
           <span className="text-sm text-ink">

@@ -32,7 +32,7 @@ export default async function HistoricoPage() {
       </p>
 
       {rows.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-dashed border-hairline px-6 py-10 text-center">
+        <div className="mt-6 rounded-2xl border border-dashed border-white/10 px-6 py-10 text-center">
           <FileClock size={20} strokeWidth={1.5} className="mx-auto text-faint" />
           <p className="mt-2 text-sm text-muted">Nenhum relatório salvo ainda.</p>
           <p className="mt-1 text-xs text-faint">
@@ -40,10 +40,10 @@ export default async function HistoricoPage() {
           </p>
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-lg border border-hairline bg-surface">
+        <div className="glass mt-6 overflow-hidden rounded-2xl">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-hairline text-left text-xs uppercase tracking-wide text-faint">
+              <tr className="border-b border-white/8 text-left text-xs uppercase tracking-wide text-faint">
                 <th className="px-4 py-2.5 font-normal">Título</th>
                 <th className="px-4 py-2.5 font-normal">Período</th>
                 <th className="px-4 py-2.5 text-right font-normal">Salvo em</th>
@@ -51,7 +51,7 @@ export default async function HistoricoPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-hairline last:border-0">
+                <tr key={r.id} className="border-b border-white/5 last:border-0 transition-colors hover:bg-white/[0.03]">
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/report/${r.id}`}
