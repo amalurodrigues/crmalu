@@ -17,13 +17,14 @@ automaticamente pelo Claude Code. `docs/` tem a especificação completa por
 packages/db          schema Drizzle (subconjunto de docs/02 necessário p/ CSV)
 packages/csv-import   parser + importer do export do Ads Manager
 packages/metrics      SUM/SUM, divisão null-safe — única fonte de cálculo derivado
-apps/web              Next.js: telas /import e /report
-scripts/              CLIs: seed, import, report
+apps/web              Next.js: carteira, área do cliente, /import, /report, login
+scripts/              CLIs: seed, import, report, set-password
 ```
 
-Deliberadamente ainda **não existe**: autenticação, `packages/reports`
-(payload + narrativa), tabelas específicas de API (`platform_credentials`,
-`raw_api_responses`). Ver `docs/08-roadmap.md` para a sequência completa.
+Deliberadamente ainda **não existe**: `packages/reports` (payload + narrativa),
+tabelas específicas de API (`platform_credentials`, `raw_api_responses`) e
+ingestão de `offline_results` (leads qualificados e vendas, que fechariam as
+duas últimas etapas do funil). Ver `docs/08-roadmap.md` para a sequência.
 
 No ar em https://crmalu.vercel.app — Vercel Hobby + Neon Postgres, deploy
 automático a cada push na `main`.
