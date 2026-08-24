@@ -17,20 +17,32 @@ automaticamente pelo Claude Code. `docs/` tem a especificação completa por
 packages/db          schema Drizzle (subconjunto de docs/02 necessário p/ CSV)
 packages/csv-import   parser + importer do export do Ads Manager
 packages/metrics      SUM/SUM, divisão null-safe — única fonte de cálculo derivado
+apps/web              Next.js: telas /import e /report
 scripts/              CLIs: seed, import, report
 ```
 
-Deliberadamente ainda **não existe**: UI, autenticação, `packages/reports`
+Deliberadamente ainda **não existe**: autenticação, `packages/reports`
 (payload + narrativa), tabelas específicas de API (`platform_credentials`,
 `raw_api_responses`). Ver `docs/08-roadmap.md` para a sequência completa.
 
+No ar em https://crmalu.vercel.app — Vercel Hobby + Neon Postgres, deploy
+automático a cada push na `main`.
+
 ## Rodando local
 
-Pré-requisito: Postgres rodando (`postgres://postgres:postgres@localhost:5432/tego`,
-ajustável via `DATABASE_URL`).
+Pré-requisito: um Postgres alcançável. Ou o Neon de produção (pegue a string
+em Vercel → Settings → Environment Variables, ou `vercel env pull .env`), ou
+um Postgres local em `postgres://postgres:postgres@localhost:5432/tego`.
+
+Copie `.env.example` para `.env` e preencha o `DATABASE_URL`. Os scripts e o
+`drizzle-kit` leem esse arquivo sozinhos — `scripts/*.ts` importam
+`dotenv/config` na primeira linha, antes de `@tego/db`, que resolve a
+connection string no topo do módulo. Sem `.env`, tudo cai no fallback
+`localhost:5432` de `packages/db/src/client.ts` sem avisar.
 
 ```bash
 npm install
+cp .env.example .env   # e preencha DATABASE_URL
 
 # aplicar schema
 npx drizzle-kit generate
@@ -45,6 +57,9 @@ npx tsx scripts/import-csv.ts caminho/do/export.csv <AD_ACCOUNT_ID>
 
 # ver o CPA por vertical, calculado via packages/metrics
 npx tsx scripts/report-vertical.ts <AD_ACCOUNT_ID>
+
+# subir a UI
+npm run dev -w @tego/web
 ```
 
 ## Deploy — o mais simples e barato ($0/mês)
@@ -98,25 +113,34 @@ git push -u origin main
 
 ### 4. Aplicar o schema e criar o cliente (uma vez, da sua máquina)
 
-Depois do primeiro deploy, pegue a `DATABASE_URL` em Vercel → Settings →
-Environment Variables (ou `vercel env pull .env.local`), e rode local:
+Depois do primeiro deploy, ponha a `DATABASE_URL` do Neon no `.env` local
+(Vercel → Settings → Environment Variables, ou `vercel env pull .env`) e rode:
 
 ```bash
 npm install
-DATABASE_URL="<connection string do Neon>" npx drizzle-kit generate
-DATABASE_URL="<connection string do Neon>" npx drizzle-kit migrate
-DATABASE_URL="<connection string do Neon>" npx tsx scripts/seed-client.ts
+npx drizzle-kit migrate
+npx tsx scripts/seed-client.ts
 ```
 
 Isso cria as 7 tabelas e o cliente/conta no banco de produção — o mesmo
 processo que já validamos localmente, só apontando para o Neon em vez do
 Postgres local.
 
+Dois detalhes que custam tempo se passarem batido:
+
+- A variável precisa se chamar exatamente `DATABASE_URL`. A integração do
+  Neon às vezes cria só `POSTGRES_URL` e companhia; se `DATABASE_URL` não
+  estiver na lista, adicione à mão.
+- Variável de ambiente nova **não entra em deploy existente**. Depois de
+  criar o banco, é obrigatório um Redeploy, senão `/report` continua
+  respondendo 500 com `ECONNREFUSED 127.0.0.1:5432`.
+
 ### 5. Pronto
 
-Acesse a URL que a Vercel deu (`seu-projeto.vercel.app`), vá em **Importar
-CSV**, suba um export do Ads Manager, confira em **Relatório**.
+Acesse https://crmalu.vercel.app, vá em **Importar CSV**, suba um export do
+Ads Manager, confira em **Relatório**.
 
+## Próximos passos
 
 1. Portar os testes do protótipo Python (`prototypes/`) para
    `packages/csv-import/__tests__` e `packages/metrics/__tests__`, incluindo

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { db, dimEntity, factInsightsDaily, factActionsDaily, pool } from "@tego/db";
 import { sumTotals, computeMetrics, type RawTotals } from "@tego/metrics";
 import { eq } from "drizzle-orm";

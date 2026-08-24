@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { parseMetaCsv, importParsedRows } from "@tego/csv-import";
 import { db, importRuns, pool } from "@tego/db";
 

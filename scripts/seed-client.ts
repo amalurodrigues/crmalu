@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { db, clients, adAccounts } from "@tego/db";
 import { eq } from "drizzle-orm";
 
