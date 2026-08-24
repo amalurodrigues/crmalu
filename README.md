@@ -62,6 +62,55 @@ npx tsx scripts/report-vertical.ts <AD_ACCOUNT_ID>
 npm run dev -w @tego/web
 ```
 
+## Acesso ao painel
+
+O painel exige login. Toda rota nasce protegida pelo middleware; a lista de
+exceções (`/login`, `/api/auth`) vive em `apps/web/auth.config.ts`, como código
+e não como regex — ver o comentário em `apps/web/middleware.ts` para o motivo.
+
+### Configuração, uma vez
+
+**1. `AUTH_SECRET`** — é o que assina o cookie de sessão. Sem ele o Auth.js
+recusa a subir em produção (falha fechada: erro, nunca página aberta).
+
+```bash
+npx auth secret
+```
+
+Isso grava o segredo no `.env` local. Para a Vercel, gere **outro** e cole em
+Settings → Environment Variables com o nome `AUTH_SECRET`. Segredo de produção
+não deve ser o mesmo do seu notebook.
+
+**2. Criar o operador** — a senha é digitada, nunca passada por argumento ou
+variável de ambiente (as duas vazam em histórico de shell e em lista de
+processos):
+
+```bash
+npx tsx scripts/set-password.ts voce@exemplo.com
+```
+
+O script grava direto no banco apontado pelo `DATABASE_URL` — se o `.env`
+aponta para o Neon de produção, o usuário nasce em produção. Rode o mesmo
+comando de novo para trocar a senha.
+
+### Como está montado
+
+| Peça | Onde | Por quê |
+|---|---|---|
+| Config de borda | `auth.config.ts` | Middleware roda em Edge: sem `node:crypto`, sem socket de banco |
+| Config de Node | `auth.ts` | Verifica senha e consulta o banco |
+| Hash | `packages/db/src/password.ts` | scrypt do próprio Node — dependência que não existe não quebra deploy |
+| Sessão | JWT, 12h | Com um operador, sessão em banco custaria uma consulta por request |
+
+`users.role` já aceita `client` além de `operator`, com `client_id` como escopo,
+para o acesso read-only do cliente previsto na Fase 4 — sem migration nova
+naquele momento.
+
+Magic link (previsto no `CLAUDE.md`) fica para quando houver remetente de e-mail
+configurado. Credenciais fecham o acesso hoje; o provider de e-mail entra depois
+sem reescrever nada.
+
+
 ## Deploy — o mais simples e barato ($0/mês)
 
 Stack: **Vercel Hobby** (grátis) + **Neon Postgres** (grátis, provisionado

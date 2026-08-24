@@ -24,6 +24,31 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
+/**
+ * Contas de acesso ao painel.
+ *
+ * `role` já nasce com dois valores porque a Fase 4 prevê acesso read-only do
+ * cliente ao próprio relatório (CLAUDE.md § 3) — `client_id` é o escopo desse
+ * acesso, e fica nulo para o operador, que enxerga a carteira inteira. Só o
+ * papel `operator` é emitido hoje; `client` existe para o dia em que a Fase 4
+ * abrir, sem exigir migration nova naquele momento.
+ *
+ * Sessão é JWT, então não há tabela de sessions: com um operador, guardar
+ * sessão no banco só adicionaria uma consulta por request sem ganhar nada.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  /** formato "scrypt$N$r$p$salt$hash" — ver packages/db/src/password.ts */
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("operator"), // 'operator' | 'client'
+  clientId: uuid("client_id"),
+  status: text("status").notNull().default("active"),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
