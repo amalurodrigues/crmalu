@@ -8,7 +8,7 @@ import {
   importRuns,
 } from "@tego/db";
 import { sumTotals, computeMetrics, sampleVerdict, type RawTotals } from "@tego/metrics";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, and, gte, lte, sql } from "drizzle-orm";
 import {
   DIMENSIONS,
   METRICS,
@@ -29,9 +29,10 @@ const PRIMARY_CONVERSION_KEY = "messaging_started";
 
 const EMPTY: RawTotals = { impressions: 0, spend: 0, conversions: 0 };
 
-function addTotals(a: RawTotals, b: RawTotals): RawTotals {
-  return sumTotals([a, b]);
-}
+/** Dimensões que vêm da hierarquia do Meta, não das tags do nome do conjunto. */
+const ENTITY_DIMENSIONS = new Set<DimensionKey>(["campanha", "conjunto", "criativo"]);
+
+const SEM_TAG = "(sem tag)";
 
 /**
  * Diferença em dias entre duas datas 'YYYY-MM-DD'.
@@ -41,32 +42,46 @@ function addTotals(a: RawTotals, b: RawTotals): RawTotals {
 function daysBetweenInclusive(start: string, end: string): number {
   const [ys, ms, ds] = start.split("-").map(Number);
   const [ye, me, de] = end.split("-").map(Number);
-  const ms_ = Date.UTC(ye, me - 1, de) - Date.UTC(ys, ms - 1, ds);
-  return Math.round(ms_ / 86_400_000) + 1;
+  return Math.round((Date.UTC(ye, me - 1, de) - Date.UTC(ys, ms - 1, ds)) / 86_400_000) + 1;
 }
 
-/** Valor da dimensão para uma entidade. `criativo` é o nome do próprio anúncio. */
-function dimensionValue(
-  entity: { name: string; vertical: string | null; canal: string | null; temperatura: string | null },
-  dimension: DimensionKey
-): string {
-  switch (dimension) {
-    case "vertical":
-      return entity.vertical ?? "(sem tag)";
-    case "canal":
-      return entity.canal ?? "(sem tag)";
-    case "temperatura":
-      return entity.temperatura ?? "(sem tag)";
-    case "criativo":
-      return entity.name;
-  }
+export interface LoadOptions {
+  /** slug do cliente; ausente = primeiro cliente cadastrado */
+  slug?: string;
+  /** recorte de datas 'YYYY-MM-DD'; ausente = todo o período disponível */
+  from?: string;
+  to?: string;
 }
 
-export async function loadReportPayload(): Promise<ReportPayload | null> {
-  const [account] = await db.select().from(adAccounts).limit(1);
+export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportPayload | null> {
+  const [client] = opts.slug
+    ? await db.select().from(clients).where(eq(clients.slug, opts.slug))
+    : await db.select().from(clients).limit(1);
+  if (!client) return null;
+
+  const [account] = await db
+    .select()
+    .from(adAccounts)
+    .where(eq(adAccounts.clientId, client.id))
+    .limit(1);
   if (!account) return null;
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, account.clientId));
+  // Extremos do que existe, ANTES de aplicar o filtro — é o que define os
+  // limites do seletor de datas na UI.
+  const [bounds] = await db
+    .select({
+      min: sql<string | null>`min(${factInsightsDaily.date})::text`,
+      max: sql<string | null>`max(${factInsightsDaily.date})::text`,
+    })
+    .from(factInsightsDaily)
+    .where(eq(factInsightsDaily.adAccountId, account.id));
+
+  if (!bounds?.min || !bounds?.max) return null;
+  const dataStart = bounds.min;
+  const dataEnd = bounds.max;
+
+  const from = opts.from && opts.from >= dataStart ? opts.from : dataStart;
+  const to = opts.to && opts.to <= dataEnd ? opts.to : dataEnd;
 
   const entities = await db
     .select()
@@ -74,18 +89,31 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
     .where(eq(dimEntity.adAccountId, account.id));
   if (entities.length === 0) return null;
 
-  const entityIds = entities.map((e) => e.id);
-
-  // Duas queries no total, não duas por entidade.
+  // Filtro de data aplicado no banco, não em memória: docs/03 prevê ~5 anos de
+  // histórico por conta, e trazer tudo para recortar uma semana não escala.
   const insights = await db
     .select()
     .from(factInsightsDaily)
-    .where(eq(factInsightsDaily.adAccountId, account.id));
-  const actions = entityIds.length
-    ? await db.select().from(factActionsDaily).where(inArray(factActionsDaily.entityId, entityIds))
-    : [];
-
+    .where(
+      and(
+        eq(factInsightsDaily.adAccountId, account.id),
+        gte(factInsightsDaily.date, from),
+        lte(factInsightsDaily.date, to)
+      )
+    );
   if (insights.length === 0) return null;
+
+  const entityIds = entities.map((e) => e.id);
+  const actions = await db
+    .select()
+    .from(factActionsDaily)
+    .where(
+      and(
+        inArray(factActionsDaily.entityId, entityIds),
+        gte(factActionsDaily.date, from),
+        lte(factActionsDaily.date, to)
+      )
+    );
 
   // CLAUDE.md § 2.4: agregação com mais de uma moeda falha alto, não silencia.
   const currencies = [...new Set(insights.map((i) => i.currency))];
@@ -98,6 +126,65 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
   }
 
   const entityById = new Map(entities.map((e) => [e.id, e]));
+  const entityByExtId = new Map(entities.map((e) => [e.externalId, e]));
+
+  /**
+   * Rótulo do criativo, desambiguado.
+   *
+   * Nome de anúncio NÃO é único dentro de uma conta: dois conjuntos diferentes
+   * podem ter um "Estático01" cada, e é comum — o operador nomeia por posição
+   * na esteira de criativos, não por identidade global. Agrupar por nome cru
+   * somaria dois anúncios distintos numa linha só e produziria um CPA que não
+   * corresponde a nada.
+   *
+   * A chave de agrupamento é sempre a entidade; só o RÓTULO ganha um sufixo, e
+   * apenas quando o nome de fato colide — pendurar o conjunto em todo criativo
+   * poluiria a legenda do gráfico sem informar nada.
+   */
+  const adEntities = entities.filter((e) => e.level === "ad");
+  const nameCount = new Map<string, number>();
+  for (const e of adEntities) nameCount.set(e.name, (nameCount.get(e.name) ?? 0) + 1);
+
+  const creativeLabelById = new Map<string, string>();
+  for (const e of adEntities) {
+    if ((nameCount.get(e.name) ?? 0) <= 1) {
+      creativeLabelById.set(e.id, e.name);
+      continue;
+    }
+    const conjunto = e.parentExtId ? entityByExtId.get(e.parentExtId)?.name : undefined;
+    const disambiguator = conjunto ?? e.vertical ?? e.externalId.slice(-6);
+    creativeLabelById.set(e.id, `${e.name} · ${disambiguator}`);
+  }
+
+  /**
+   * Valor da dimensão para uma entidade de anúncio.
+   *
+   * Conjunto e campanha sobem a hierarquia por `parent_ext_id`. Quando o export
+   * não trazia IDs, o importer gravou a chave pelo nome (`adset::<nome>`), então
+   * isto funciona nos dois casos — só fica mais frágil a rename no segundo.
+   */
+  function dimensionValue(entityId: string, dimension: DimensionKey): string {
+    const ad = entityById.get(entityId);
+    if (!ad) return SEM_TAG;
+
+    switch (dimension) {
+      case "criativo":
+        return creativeLabelById.get(ad.id) ?? ad.name;
+      case "conjunto":
+        return (ad.parentExtId && entityByExtId.get(ad.parentExtId)?.name) ?? "(sem conjunto)";
+      case "campanha": {
+        const adset = ad.parentExtId ? entityByExtId.get(ad.parentExtId) : undefined;
+        const campaign = adset?.parentExtId ? entityByExtId.get(adset.parentExtId) : undefined;
+        return campaign?.name ?? "(sem campanha)";
+      }
+      case "vertical":
+        return ad.vertical ?? SEM_TAG;
+      case "canal":
+        return ad.canal ?? SEM_TAG;
+      case "temperatura":
+        return ad.temperatura ?? SEM_TAG;
+    }
+  }
 
   // (entityId, date) -> conversões da chave primária
   const conversionsByEntityDate = new Map<string, number>();
@@ -128,31 +215,50 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
   const periodDays = daysBetweenInclusive(periodStart, periodEnd);
 
   const grandTotals = sumTotals(cells.map((c) => c.totals));
+  const targetCpa = client.targetCpa === null ? null : Number(client.targetCpa);
 
   // ---- quebras por dimensão -------------------------------------------------
   const byDimension = {} as Record<DimensionKey, DimensionSlice>;
 
   for (const dimension of DIMENSIONS) {
-    // (valor da dimensão) -> RawTotals, e (valor, data) -> RawTotals
     const totalsByKey = new Map<string, RawTotals>();
-    const totalsByKeyDate = new Map<string, Map<string, RawTotals>>();
+    const totalsByDateKey = new Map<string, Map<string, RawTotals>>();
 
     for (const cell of cells) {
-      const entity = entityById.get(cell.entityId);
-      if (!entity) continue;
-      const key = dimensionValue(entity, dimension);
+      const key = dimensionValue(cell.entityId, dimension);
 
-      totalsByKey.set(key, addTotals(totalsByKey.get(key) ?? EMPTY, cell.totals));
+      totalsByKey.set(key, sumTotals([totalsByKey.get(key) ?? EMPTY, cell.totals]));
 
-      if (!totalsByKeyDate.has(cell.date)) totalsByKeyDate.set(cell.date, new Map());
-      const perDate = totalsByKeyDate.get(cell.date)!;
-      perDate.set(key, addTotals(perDate.get(key) ?? EMPTY, cell.totals));
+      if (!totalsByDateKey.has(cell.date)) totalsByDateKey.set(cell.date, new Map());
+      const perDate = totalsByDateKey.get(cell.date)!;
+      perDate.set(key, sumTotals([perDate.get(key) ?? EMPTY, cell.totals]));
     }
 
-    // ordena por gasto desc — docs/06 pede ranking, não ordem alfabética
-    const keys = [...totalsByKey.keys()].sort(
-      (a, b) => totalsByKey.get(b)!.spend - totalsByKey.get(a)!.spend
-    );
+    /**
+     * "Melhores no topo".
+     *
+     * Para dimensões de entidade (campanha/conjunto/criativo) isso é CPA
+     * crescente: o que entrega resultado mais barato primeiro. Quem não teve
+     * conversão nenhuma tem CPA null e vai para o fim — null aqui é "não dá
+     * para ranquear", não "infinitamente ruim", mas no fim da lista é onde
+     * o operador espera encontrar quem não performou.
+     *
+     * Para dimensões de tag a ordem é por gasto, porque a pergunta ali é
+     * "onde foi parar a verba", não "qual venceu".
+     */
+    const keys = [...totalsByKey.keys()].sort((a, b) => {
+      const ta = totalsByKey.get(a)!;
+      const tb = totalsByKey.get(b)!;
+      if (ENTITY_DIMENSIONS.has(dimension)) {
+        const ca = computeMetrics(ta).cpa;
+        const cb = computeMetrics(tb).cpa;
+        if (ca === null && cb === null) return tb.spend - ta.spend;
+        if (ca === null) return 1;
+        if (cb === null) return -1;
+        if (ca !== cb) return ca - cb;
+      }
+      return tb.spend - ta.spend;
+    });
 
     const rows = keys.map((key) => {
       const totals = totalsByKey.get(key)!;
@@ -170,7 +276,7 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
     for (const metric of METRICS) {
       series[metric] = dates.map((date) => {
         const point: SeriesPoint = { date };
-        const perDate = totalsByKeyDate.get(date);
+        const perDate = totalsByDateKey.get(date);
         for (const key of keys) {
           const totals = perDate?.get(key) ?? EMPTY;
           if (metric === "spend") point[key] = totals.spend;
@@ -201,11 +307,7 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
             "essa métrica em 'Personalizar colunas' — ver docs/03-ingestao-csv-meta-ads.md."
           : undefined,
     },
-    {
-      key: "messaging_started",
-      label: "Conversas iniciadas",
-      value: grandTotals.conversions,
-    },
+    { key: "messaging_started", label: "Conversas iniciadas", value: grandTotals.conversions },
     {
       key: "qualified_leads",
       label: "Leads qualificados",
@@ -225,7 +327,6 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
     return { ...s, rateFromPrev };
   });
 
-  // ---- caveats do último import --------------------------------------------
   const [lastImport] = await db
     .select()
     .from(importRuns)
@@ -236,11 +337,15 @@ export async function loadReportPayload(): Promise<ReportPayload | null> {
   return {
     meta: {
       accountName: account.name,
-      clientName: client?.name ?? account.name,
+      clientName: client.name,
+      clientSlug: client.slug,
       currency: account.currency,
       periodStart,
       periodEnd,
       periodDays,
+      dataStart,
+      dataEnd,
+      targetCpa,
       generatedAt: new Date().toISOString(),
       caveats: lastImport?.warnings ?? [],
     },

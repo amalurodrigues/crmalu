@@ -9,15 +9,30 @@
  */
 import type { RawTotals, DerivedMetrics, SampleVerdict } from "@tego/metrics";
 
-/** Dimensões pelas quais o relatório pode ser quebrado. */
-export const DIMENSIONS = ["vertical", "canal", "temperatura", "criativo"] as const;
+/**
+ * Dimensões pelas quais o relatório pode ser quebrado.
+ *
+ * As três primeiras são a hierarquia real do Meta, resolvida por
+ * `parent_ext_id` em dim_entity. As três últimas são as tags
+ * [Vertical][Canal][Temperatura] extraídas do nome do conjunto.
+ */
+export const DIMENSIONS = [
+  "campanha",
+  "conjunto",
+  "criativo",
+  "vertical",
+  "canal",
+  "temperatura",
+] as const;
 export type DimensionKey = (typeof DIMENSIONS)[number];
 
 export const DIMENSION_LABELS: Record<DimensionKey, string> = {
+  campanha: "Campanha",
+  conjunto: "Conjunto",
+  criativo: "Criativo",
   vertical: "Vertical",
   canal: "Canal",
   temperatura: "Temperatura",
-  criativo: "Criativo",
 };
 
 /** Métricas plotáveis na série temporal. */
@@ -71,10 +86,17 @@ export interface ReportPayload {
   meta: {
     accountName: string;
     clientName: string;
+    clientSlug: string;
     currency: string;
+    /** início do recorte exibido (pode ser um filtro, não o dado inteiro) */
     periodStart: string;
     periodEnd: string;
     periodDays: number;
+    /** extremos do que existe no banco — alimentam os limites do filtro */
+    dataStart: string;
+    dataEnd: string;
+    /** meta de CPA do cliente; null = sem meta, gráfico sem linha de referência */
+    targetCpa: number | null;
     generatedAt: string;
     /** avisos herdados do import — export sem coluna de ID, etc. */
     caveats: string[];

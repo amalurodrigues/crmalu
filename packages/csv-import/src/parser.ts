@@ -56,6 +56,8 @@ function extractTags(adsetName: string): string[] {
  * do "Personalizar colunas", então cada métrica aceita uma lista de apelidos.
  * Coluna ausente vira `null` (não 0) — ver RawTotals em packages/metrics.
  */
+const CAMPAIGN_NAME_COLUMNS = ["Nome da campanha", "Campanha", "Campaign name"] as const;
+
 const CLICK_COLUMNS = {
   linkClicks: ["Cliques no link", "Cliques em links", "Link clicks"],
   clicks: ["Cliques (todos)", "Cliques", "Clicks (all)"],
@@ -83,6 +85,7 @@ export interface ParsedAdRow {
   adsetId: string | null;
   adName: string;
   adsetName: string;
+  campaignName: string | null;
   naturalKey: string; // adId quando disponível, senão adsetName::adName
   date: string | null; // null se o export for período único (v1)
   status: string;
@@ -136,6 +139,8 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
   const hasDay = headers.includes("Dia");
   const templateVersion = hasIds && hasDay ? "v2_id_dia" : "v1_periodo_unico";
 
+  const campaignNameCol = findHeader(headers, CAMPAIGN_NAME_COLUMNS);
+
   const clickCols = {
     clicks: findHeader(headers, CLICK_COLUMNS.clicks),
     linkClicks: findHeader(headers, CLICK_COLUMNS.linkClicks),
@@ -143,6 +148,13 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
   };
 
   const warnings: string[] = [];
+  if (!campaignNameCol) {
+    warnings.push(
+      "Export sem a coluna 'Nome da campanha' — o agrupamento por campanha vai " +
+        "exibir o ID numérico em vez do nome. Adicione a coluna em " +
+        "'Personalizar colunas' no Ads Manager."
+    );
+  }
   if (!clickCols.linkClicks) {
     warnings.push(
       "Export sem a coluna 'Cliques no link' — sem CTR, CPC e CVR, e o funil " +
@@ -167,6 +179,7 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
     const adId = hasIds ? toNull(r["Identificação do anúncio"]) : null;
     const adsetName = r["Nome do conjunto de anúncios"];
     const adName = r["Nome do anúncio"];
+    const campaignName = campaignNameCol ? toNull(r[campaignNameCol]) : null;
 
     return {
       adId,
@@ -174,6 +187,7 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
       adsetId: hasIds ? toNull(r["Identificação do conjunto de anúncios"]) : null,
       adName,
       adsetName,
+      campaignName,
       naturalKey: adId ?? `${adsetName}::${adName}`,
       date: hasDay ? toNull(r["Dia"]) : null,
       status: r["Status de veiculação"],

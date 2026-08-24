@@ -11,6 +11,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -21,6 +22,7 @@ import {
   Save,
   History,
   TriangleAlert,
+  CalendarRange,
 } from "lucide-react";
 import { CHART_COLORS, SERIES_PALETTE } from "../../lib/chart-colors";
 import {
@@ -102,10 +104,10 @@ function KpiCard({
   badge?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-hairline bg-surface px-4 py-3.5">
+    <div className="glass rounded-xl px-4 py-3.5">
       <div className="flex items-center gap-1.5 text-faint">
         <Icon size={13} strokeWidth={1.75} />
-        <span className="text-xs uppercase tracking-wide">{label}</span>
+        <span className="font-display text-xs font-semibold uppercase tracking-wider">{label}</span>
       </div>
       <div className="tabular mt-1.5 font-mono text-xl font-medium text-ink">{value}</div>
       {denominator && <div className="mt-1 text-[11px] text-faint">{denominator}</div>}
@@ -235,7 +237,7 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
             {frozenAt ? "Relatório salvo" : "Relatório"}
           </p>
           {readOnly ? (
-            <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-ink">{title}</h1>
           ) : (
             <input
               name="title"
@@ -243,7 +245,8 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
               defaultValue={title}
               aria-label="Título do relatório"
               className="w-full min-w-0 rounded border border-transparent bg-transparent px-1
-                         text-2xl font-semibold text-ink outline-none hover:border-hairline
+                         font-display text-3xl font-bold tracking-tight text-ink outline-none
+                         hover:border-white/15
                          focus:border-accent"
             />
           )}
@@ -251,6 +254,48 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
             {meta.accountName} · {longDate(meta.periodStart)} – {longDate(meta.periodEnd)}
             <span className="text-faint"> ({meta.periodDays} dias)</span>
           </p>
+
+          {/* Filtro de período por GET: o recorte vira URL, e URL se manda por
+              mensagem. docs/06 — "todo estado de filtro na querystring". */}
+          {!readOnly && (
+            <form method="get" action="/report" className="mt-3 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="slug" value={meta.clientSlug} />
+              <CalendarRange size={13} strokeWidth={1.75} className="text-faint" />
+              <input
+                type="date"
+                name="from"
+                aria-label="Início do período"
+                defaultValue={meta.periodStart}
+                min={meta.dataStart}
+                max={meta.dataEnd}
+                className="rounded-md border border-white/10 bg-canvas/60 px-2 py-1 text-xs text-muted outline-none focus:border-accent"
+              />
+              <span className="text-xs text-faint">até</span>
+              <input
+                type="date"
+                name="to"
+                aria-label="Fim do período"
+                defaultValue={meta.periodEnd}
+                min={meta.dataStart}
+                max={meta.dataEnd}
+                className="rounded-md border border-white/10 bg-canvas/60 px-2 py-1 text-xs text-muted outline-none focus:border-accent"
+              />
+              <button
+                type="submit"
+                className="rounded-md border border-white/10 px-2.5 py-1 text-xs text-muted transition-colors hover:border-accent/40 hover:text-ink"
+              >
+                Aplicar
+              </button>
+              {(meta.periodStart !== meta.dataStart || meta.periodEnd !== meta.dataEnd) && (
+                <a
+                  href={`/report?slug=${meta.clientSlug}`}
+                  className="text-xs text-faint underline-offset-2 hover:text-ink hover:underline"
+                >
+                  período inteiro
+                </a>
+              )}
+            </form>
+          )}
           {frozenAt && (
             <p className="mt-1 text-xs text-faint">
               Números congelados em {new Date(frozenAt).toLocaleString("pt-BR")} — não recalculam.
@@ -269,6 +314,9 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
           </a>
           {!readOnly && (
             <form id="save-report" action={saveAction}>
+              <input type="hidden" name="slug" value={meta.clientSlug} />
+              <input type="hidden" name="from" value={meta.periodStart} />
+              <input type="hidden" name="to" value={meta.periodEnd} />
               <button
                 type="submit"
                 className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5
@@ -284,7 +332,7 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
 
       {/* avisos herdados do import */}
       {meta.caveats.length > 0 && (
-        <div className="mt-4 rounded-lg border border-hairline bg-surface px-4 py-3">
+        <div className="glass mt-4 rounded-xl px-4 py-3">
           <div className="flex items-center gap-1.5 text-faint">
             <TriangleAlert size={13} strokeWidth={1.75} />
             <span className="text-xs uppercase tracking-wide">Ressalvas do dado</span>
@@ -340,9 +388,9 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
 
       {/* série temporal + funil */}
       <div className="mt-4 grid gap-4 lg:grid-cols-5">
-        <div className="rounded-lg border border-hairline bg-surface p-4 lg:col-span-3">
+        <div className="glass rounded-2xl p-4 lg:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-ink">
+            <h2 className="font-display text-sm font-semibold text-ink">
               {METRIC_LABELS[metric]} diário por {DIMENSION_LABELS[dimension].toLowerCase()}
             </h2>
             <Segmented
@@ -394,6 +442,21 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
                     connectNulls={false}
                   />
                 ))}
+                {/* docs/06: "gráfico sem referência não sustenta decisão".
+                    Só aparece na série de CPA e só se o cliente tem meta. */}
+                {metric === "cpa" && meta.targetCpa !== null && (
+                  <ReferenceLine
+                    y={meta.targetCpa}
+                    stroke={CHART_COLORS.accentWarm}
+                    strokeDasharray="5 4"
+                    label={{
+                      value: `meta ${money(meta.targetCpa, meta.currency)}`,
+                      position: "insideTopRight",
+                      fill: CHART_COLORS.accentWarm,
+                      fontSize: 10,
+                    }}
+                  />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -410,8 +473,8 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
           </div>
         </div>
 
-        <div className="rounded-lg border border-hairline bg-surface p-4 lg:col-span-2">
-          <h2 className="text-sm font-medium text-ink">Funil</h2>
+        <div className="glass rounded-2xl p-4 lg:col-span-2">
+          <h2 className="font-display text-sm font-semibold text-ink">Funil</h2>
           <div className="mt-3">
             <Funnel stages={funnel} />
           </div>
@@ -419,8 +482,8 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
       </div>
 
       {/* CPA por chave da dimensão — barras ordenadas (docs/06) */}
-      <div className="mt-4 rounded-lg border border-hairline bg-surface p-4">
-        <h2 className="text-sm font-medium text-ink">
+      <div className="glass mt-4 rounded-2xl p-4">
+        <h2 className="font-display text-sm font-semibold text-ink">
           CPA por {DIMENSION_LABELS[dimension].toLowerCase()}
         </h2>
         <div className="mt-3" style={{ height: Math.max(slice.rows.length * 34 + 24, 120) }}>
@@ -454,13 +517,26 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
                   <Cell key={r.key} fill={colorFor(r.key)} />
                 ))}
               </Bar>
+              {meta.targetCpa !== null && (
+                <ReferenceLine
+                  x={meta.targetCpa}
+                  stroke={CHART_COLORS.accentWarm}
+                  strokeDasharray="5 4"
+                  label={{
+                    value: "meta",
+                    position: "top",
+                    fill: CHART_COLORS.accentWarm,
+                    fontSize: 10,
+                  }}
+                />
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* tabela */}
-      <div className="mt-4 overflow-x-auto rounded-lg border border-hairline bg-surface">
+      <div className="glass mt-4 overflow-x-auto rounded-2xl">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-hairline text-left text-xs uppercase tracking-wide text-faint">

@@ -32,6 +32,45 @@ export const clients = pgTable("clients", {
   funnelType: text("funnel_type").notNull(), // 'leadgen','ecommerce','app','institucional'
   status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // --- ficha do cliente, exibida no topo da área dele ---
+  /** nicho em texto livre; `segment` é a taxonomia fechada, isto é a descrição */
+  niche: text("niche"),
+  website: text("website"),
+  /** cor do cartão na carteira — hex; null cai na paleta por índice */
+  accentColor: text("accent_color"),
+  monthlyBudget: numeric("monthly_budget", { precision: 18, scale: 2 }),
+  /**
+   * Meta de CPA. Existe para virar linha de referência nos gráficos: docs/06
+   * diz que "gráfico sem referência não sustenta decisão". Null = sem meta
+   * definida, e aí o gráfico simplesmente não desenha a linha.
+   */
+  targetCpa: numeric("target_cpa", { precision: 18, scale: 2 }),
+});
+
+/**
+ * Anotações do operador sobre o cliente: histórico do que já foi feito,
+ * estratégias em curso, ideias para depois, notas soltas.
+ *
+ * Uma tabela com discriminador em vez de quatro tabelas quase idênticas — os
+ * quatro tipos têm exatamente os mesmos campos e a mesma vida útil, e separá-los
+ * só produziria quatro queries onde uma resolve.
+ *
+ * `historico` e `ideia` são a semente de `actionsTaken` e `nextPeriod` do
+ * payload de relatório (docs/05) — é o que separa relatório de printscreen.
+ *
+ * LGPD (docs/07): campo de texto livre do operador sobre a CONTA. Não gravar
+ * aqui dado pessoal de lead.
+ */
+export const clientNotes = pgTable("client_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  kind: text("kind").notNull(), // 'historico' | 'estrategia' | 'ideia' | 'nota'
+  title: text("title").notNull(),
+  body: text("body"),
+  /** data do fato, quando o operador quer datar a ação; null = só createdAt */
+  happenedOn: date("happened_on"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const adAccounts = pgTable("ad_accounts", {

@@ -57,42 +57,103 @@ export async function importParsedRows(
   // cache local de external_id -> entity uuid, evita 1 SELECT por linha
   const entityCache = new Map<string, string>();
 
+  /**
+   * Upsert de uma entidade em qualquer nível da hierarquia, com cache local
+   * para não fazer um SELECT por linha do CSV.
+   */
+  async function upsertEntity(e: {
+    externalId: string;
+    level: "campaign" | "adgroup" | "ad";
+    parentExtId: string | null;
+    name: string;
+    status?: string;
+    vertical?: string | null;
+    canal?: string | null;
+    temperatura?: string | null;
+  }): Promise<string> {
+    const cached = entityCache.get(e.externalId);
+    if (cached) return cached;
+
+    const upserted = await db
+      .insert(dimEntity)
+      .values({
+        adAccountId,
+        externalId: e.externalId,
+        level: e.level,
+        parentExtId: e.parentExtId,
+        name: e.name,
+        status: e.status,
+        vertical: e.vertical ?? null,
+        canal: e.canal ?? null,
+        temperatura: e.temperatura ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [dimEntity.adAccountId, dimEntity.externalId],
+        set: {
+          name: e.name,
+          status: e.status,
+          parentExtId: e.parentExtId,
+          vertical: e.vertical ?? null,
+          canal: e.canal ?? null,
+          temperatura: e.temperatura ?? null,
+          lastSeenAt: new Date(),
+        },
+      })
+      .returning({ id: dimEntity.id });
+
+    entityCache.set(e.externalId, upserted[0].id);
+    entitiesUpserted++;
+    return upserted[0].id;
+  }
+
   for (const row of parsed.rows) {
-    // --- dim_entity (nível ad; adset fica implícito em vertical/canal/temperatura) ---
-    const externalId = row.adId ?? row.naturalKey;
-    let entityId = entityCache.get(externalId);
+    /**
+     * Chave natural por nível: o ID do Meta quando o export traz, o nome com
+     * prefixo de nível quando não traz. O prefixo evita que a chave de um
+     * conjunto colida com a de um anúncio dentro do mesmo (ad_account_id,
+     * external_id) único.
+     *
+     * A chave do anúncio permanece `adsetName::adName` (row.naturalKey) para
+     * não quebrar a idempotência das linhas já importadas — mudar a chave
+     * agora criaria entidades novas em vez de atualizar as existentes.
+     */
+    const campaignKey =
+      row.campaignId ?? (row.campaignName ? `campaign::${row.campaignName}` : null);
+    const adsetKey = row.adsetId ?? `adset::${row.adsetName}`;
+    const adKey = row.adId ?? row.naturalKey;
 
-    if (!entityId) {
-      const upserted = await db
-        .insert(dimEntity)
-        .values({
-          adAccountId,
-          externalId,
-          level: "ad",
-          parentExtId: row.adsetId,
-          name: row.adName,
-          status: row.status,
-          vertical: row.vertical,
-          canal: row.canal,
-          temperatura: row.temperatura,
-        })
-        .onConflictDoUpdate({
-          target: [dimEntity.adAccountId, dimEntity.externalId],
-          set: {
-            name: row.adName,
-            status: row.status,
-            vertical: row.vertical,
-            canal: row.canal,
-            temperatura: row.temperatura,
-            lastSeenAt: new Date(),
-          },
-        })
-        .returning({ id: dimEntity.id });
-
-      entityId = upserted[0].id;
-      entityCache.set(externalId, entityId);
-      entitiesUpserted++;
+    if (campaignKey) {
+      await upsertEntity({
+        externalId: campaignKey,
+        level: "campaign",
+        parentExtId: null,
+        name: row.campaignName ?? campaignKey,
+      });
     }
+
+    // As tags [Vertical][Canal][Temperatura] são extraídas do nome do conjunto,
+    // então é aqui que elas moram de verdade. Ficam replicadas no anúncio
+    // porque o relatório quebra por tag no grão de anúncio.
+    await upsertEntity({
+      externalId: adsetKey,
+      level: "adgroup",
+      parentExtId: campaignKey,
+      name: row.adsetName,
+      vertical: row.vertical,
+      canal: row.canal,
+      temperatura: row.temperatura,
+    });
+
+    const entityId = await upsertEntity({
+      externalId: adKey,
+      level: "ad",
+      parentExtId: adsetKey,
+      name: row.adName,
+      status: row.status,
+      vertical: row.vertical,
+      canal: row.canal,
+      temperatura: row.temperatura,
+    });
 
     const date = row.date ?? row.periodStart; // fallback v1: usa início do período como "dia"
 
@@ -131,7 +192,7 @@ export async function importParsedRows(
     if (row.resultType && row.results > 0) {
       const conversionKey = await resolveConversionKey(adAccountId, row.resultType);
       if (!conversionKey) {
-        warnings.push(`action_type não mapeado: "${row.resultType}" (entidade ${externalId})`);
+        warnings.push(`action_type não mapeado: "${row.resultType}" (entidade ${adKey})`);
       }
       await db
         .insert(factActionsDaily)

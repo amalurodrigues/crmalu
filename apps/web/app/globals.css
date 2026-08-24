@@ -5,13 +5,20 @@
   frio (não preto puro), um azul-ciano como acento primário e um âmbar como
   contraponto quente — o par serve pra distinguir 2 séries em gráfico sem
   recorrer a vermelho/verde (que aqui carregam significado de status, não
-  de categoria). Números de KPI usam fonte monoespaçada com tabular-nums:
-  o projeto inteiro foi construído em torno de "o número tem que estar
-  certo" — a tipografia do valor precisa comunicar isso à primeira vista,
-  como um terminal financeiro, não como um card de app genérico.
+  de categoria).
+
+  Tipografia em três papéis, não dois:
+    display (League Spartan) — títulos e rótulos de KPI, geométrica e pesada
+    sans (Montserrat)        — texto corrido e UI
+    mono                     — TODO número.
+
+  O mono nos números não é enfeite herdado: o projeto inteiro foi construído
+  em torno de "o número tem que estar certo", e tabular-nums mantém a coluna
+  alinhada dígito a dígito. Trocar por Montserrat nos valores faria 248,75 e
+  115,00 desalinharem na tabela. Display e sans mudam; o número não.
 */
 @theme {
-  --color-canvas: #0b0e13;
+  --color-canvas: #0a0d12;
   --color-surface: #12161d;
   --color-surface-hover: #171c25;
   --color-hairline: #232933;
@@ -23,17 +30,123 @@
   --color-good: #3dbe79;
   --color-bad: #e5675a;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* as variáveis --font-league-spartan e --font-montserrat vêm de next/font,
+     aplicadas no <html> por layout.tsx; o fallback cobre o flash inicial */
+  --font-display: var(--font-league-spartan), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 }
 
+/*
+  Profundidade do fundo: dois halos radiais frios em cantos opostos, mais um
+  grão fino por cima. O grão existe para matar o banding — gradiente escuro de
+  larga extensão vira faixas visíveis em painel de 8 bits, e o ruído dissolve
+  a transição. `background-attachment: fixed` mantém os halos parados enquanto
+  a página rola, para o fundo ler como ambiente e não como conteúdo.
+*/
 body {
-  background: var(--color-canvas);
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(900px 600px at 12% -8%, rgba(76, 154, 255, 0.10), transparent 60%),
+    radial-gradient(760px 520px at 100% 8%, rgba(124, 92, 255, 0.08), transparent 62%),
+    radial-gradient(600px 600px at 50% 110%, rgba(45, 212, 191, 0.05), transparent 65%);
+  background-attachment: fixed;
   color: var(--color-ink);
-  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  /* ruído gerado por feTurbulence — data-URI, sem requisição de rede (CSP) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+/*
+  Vidro. Usado só onde há hierarquia a comunicar — cartão de KPI, botão de
+  cliente, barra de cabeçalho. `backdrop-filter` força uma nova camada de
+  composição por elemento; espalhar isto por tabela ou linha de gráfico custa
+  frame e não comunica nada.
+
+  A borda tem duas partes: o traço externo translúcido e um `inset` claro no
+  topo. É o inset que produz a leitura de "placa de vidro com luz batendo em
+  cima" — sem ele o efeito lê como um retângulo cinza desfocado.
+*/
+.glass {
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.055) 0%,
+    rgba(255, 255, 255, 0.022) 42%,
+    rgba(255, 255, 255, 0.012) 100%
+  );
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
+    0 12px 32px -18px rgba(0, 0, 0, 0.9);
+}
+
+.glass-hover {
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.glass-hover:hover {
+  border-color: rgba(76, 154, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
+    0 18px 40px -20px rgba(0, 0, 0, 0.95);
+}
+
+/* Fio de luz no topo de um bloco — separa seções sem desenhar uma régua. */
+.edge-glow {
+  position: relative;
+}
+.edge-glow::after {
+  content: "";
+  position: absolute;
+  inset-inline: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(76, 154, 255, 0.55), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-hover:hover {
+    transform: none;
+  }
+}
+
+/*
+  Impressão: docs/06 exige que o relatório funcione no papel, e o PDF sai de
+  um print desta mesma tela. Vidro e halos viram fundo branco e borda sólida —
+  backdrop-filter não imprime e o gradiente escuro come toner.
+*/
+@media print {
+  body {
+    background: #fff;
+    color: #111;
+  }
+  body::before {
+    display: none;
+  }
+  .glass {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid #d5dae1;
+    box-shadow: none;
+  }
+  .edge-glow::after {
+    display: none;
+  }
 }
