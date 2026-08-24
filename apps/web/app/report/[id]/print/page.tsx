@@ -12,8 +12,15 @@ export const dynamic = "force-dynamic";
  * consumir quando a geração de PDF virar server-side (CLAUDE.md § 4) — um só
  * código para tela e papel.
  */
-export default async function SavedPrintPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SavedPrintPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   const { id } = await params;
+  const { preview } = await searchParams;
   const [row] = await db.select().from(reports).where(eq(reports.id, id));
   if (!row) notFound();
 
@@ -22,6 +29,7 @@ export default async function SavedPrintPage({ params }: { params: Promise<{ id:
       payload={row.payload as ReportPayload}
       title={row.title}
       frozenAt={row.generatedAt.toISOString()}
+      autoPrint={preview !== "1"}
     />
   );
 }

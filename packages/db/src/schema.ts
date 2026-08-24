@@ -222,6 +222,46 @@ export const reports = pgTable("reports", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 });
 
+/**
+ * Resultados de negócio que a plataforma de anúncio não enxerga: lead
+ * qualificado e venda fechada. É por aqui que a qualificação entra — como
+ * CONTAGEM agregada informada pelo operador ou pelo cliente, nunca como lead
+ * identificado (docs/07: PII de lead é fora de escopo, e ingerir isso criaria
+ * papel de operador sob a LGPD).
+ *
+ * São o que destrava CPL qualificado e CAC real (docs/04) e o que fecha as duas
+ * últimas etapas do funil de docs/05.
+ *
+ * Desvio consciente de docs/02, que chaveia só por `client_id`: aqui há também
+ * `campaign_ext_id`, porque o operador consegue distinguir de qual campanha
+ * veio a conversa e agregar tudo no cliente jogaria fora essa informação. Null
+ * significa "conta inteira, sem separar por campanha".
+ *
+ * `nullsNotDistinct` no único: em Postgres, NULL é distinto de NULL num índice
+ * único por padrão, então sem isso daria para gravar dez linhas de "conta
+ * inteira" para a mesma data e métrica, e a soma passaria a contar dez vezes.
+ */
+export const offlineResults = pgTable(
+  "offline_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => clients.id),
+    campaignExtId: text("campaign_ext_id"),
+    /** data a que o número se refere; para um período, use o primeiro dia */
+    date: date("date").notNull(),
+    metricKey: text("metric_key").notNull(), // 'qualified_leads' | 'closed_deals' | 'revenue'
+    value: numeric("value", { precision: 18, scale: 6 }).notNull(),
+    source: text("source"), // 'planilha_cliente' | 'crm' | 'informado_reuniao'
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqGrain: unique()
+      .on(t.clientId, t.campaignExtId, t.date, t.metricKey)
+      .nullsNotDistinct(),
+  })
+);
+
 export const importRuns = pgTable("import_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   adAccountId: uuid("ad_account_id").notNull().references(() => adAccounts.id),

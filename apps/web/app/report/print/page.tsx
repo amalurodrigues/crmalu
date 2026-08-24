@@ -9,7 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function LivePrintPage({
   searchParams,
 }: {
-  searchParams: Promise<{ slug?: string; from?: string; to?: string; campaign?: string; title?: string }>;
+  searchParams: Promise<{
+    slug?: string;
+    from?: string;
+    to?: string;
+    campaign?: string;
+    title?: string;
+    preview?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const payload = await loadReportPayload({
@@ -30,6 +37,9 @@ export default async function LivePrintPage({
         sp.title?.trim() ||
         defaultTitle(payload.meta.accountName, payload.meta.periodStart, payload.meta.periodEnd)
       }
+      /* ?preview=1 mostra o layout de papel sem abrir o diálogo — serve para
+         conferir como o PDF vai sair antes de gerar. */
+      autoPrint={sp.preview !== "1"}
     />
   );
 }

@@ -1,7 +1,7 @@
 "use server";
 
-import { db, clients, adAccounts, reports } from "@tego/db";
-import { eq } from "drizzle-orm";
+import { db, clients, adAccounts, reports, offlineResults } from "@tego/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { loadReportPayload } from "./load";
@@ -62,4 +62,85 @@ export async function saveReport(formData: FormData) {
 
   revalidatePath(`/clients/${client.slug}`);
   redirect(`/report/${row.id}`);
+}
+
+/**
+ * Grava os resultados de negócio de uma campanha para o período em tela.
+ *
+ * Campo vazio APAGA a linha em vez de gravar zero. "Não informado" e "informado
+ * zero" são fatos diferentes: com null o funil mostra a etapa como pendente e o
+ * CPL qualificado fica "—"; com zero ele diz que nenhuma das conversas virou
+ * lead, que é um diagnóstico e tanto. Escrever zero por engano transformaria
+ * silêncio em má notícia.
+ *
+ * A data usada é o primeiro dia do período exibido — o número se refere ao
+ * intervalo inteiro, e o relatório soma tudo que cai dentro da janela.
+ */
+export async function salvarResultados(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "") || undefined;
+  const from = String(formData.get("from") ?? "");
+  const to = String(formData.get("to") ?? "") || undefined;
+  const campaignParam = String(formData.get("campaignExtId") ?? "");
+  const campaignExtId = campaignParam === "" ? null : campaignParam;
+
+  const [client] = slug
+    ? await db.select().from(clients).where(eq(clients.slug, slug))
+    : await db.select().from(clients).limit(1);
+  if (!client) throw new Error("Cliente não encontrado.");
+
+  const numero = (campo: string): number | null => {
+    const bruto = String(formData.get(campo) ?? "").trim().replace(",", ".");
+    if (bruto === "") return null;
+    const n = Number(bruto);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  for (const [campo, metricKey] of [
+    ["qualifiedLeads", "qualified_leads"],
+    ["closedDeals", "closed_deals"],
+  ] as const) {
+    const valor = numero(campo);
+
+    if (valor === null) {
+      await db
+        .delete(offlineResults)
+        .where(
+          and(
+            eq(offlineResults.clientId, client.id),
+            campaignExtId === null
+              ? isNull(offlineResults.campaignExtId)
+              : eq(offlineResults.campaignExtId, campaignExtId),
+            eq(offlineResults.date, from),
+            eq(offlineResults.metricKey, metricKey)
+          )
+        );
+      continue;
+    }
+
+    await db
+      .insert(offlineResults)
+      .values({
+        clientId: client.id,
+        campaignExtId,
+        date: from,
+        metricKey,
+        value: String(valor),
+        source: "informado_reuniao",
+      })
+      .onConflictDoUpdate({
+        target: [
+          offlineResults.clientId,
+          offlineResults.campaignExtId,
+          offlineResults.date,
+          offlineResults.metricKey,
+        ],
+        set: { value: String(valor), source: "informado_reuniao" },
+      });
+  }
+
+  const params = new URLSearchParams();
+  if (slug) params.set("slug", slug);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  redirect(`/report?${params}`);
 }

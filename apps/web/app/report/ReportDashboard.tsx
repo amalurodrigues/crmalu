@@ -23,6 +23,7 @@ import {
   History,
   TriangleAlert,
   CalendarRange,
+  ClipboardCheck,
   FileDown,
   Layers,
 } from "lucide-react";
@@ -48,6 +49,7 @@ interface Props {
   /** id do relatório salvo, para a rota de impressão */
   reportId?: string;
   saveAction?: (formData: FormData) => void;
+  resultadosAction?: (formData: FormData) => void;
 }
 
 // ---------------------------------------------------------------- formatação
@@ -214,7 +216,7 @@ function Funnel({ stages }: { stages: ReportPayload["funnel"] }) {
           const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
 
           return (
-            <div key={s.key}>
+            <div key={s.key} title={s.unavailableReason ?? undefined}>
               <div className="relative h-[62px]">
                 <div
                   className="absolute inset-0"
@@ -256,21 +258,6 @@ function Funnel({ stages }: { stages: ReportPayload["funnel"] }) {
         })}
       </div>
 
-      {stages.some((s) => s.unavailableReason) && (
-        <ul className="mt-3 space-y-1 border-t border-white/5 pt-3">
-          {stages
-            .filter((s) => s.unavailableReason)
-            .map((s) => (
-              <li key={s.key} className="text-[11px] leading-snug text-faint">
-                <span className="text-muted">{s.label}:</span> {s.unavailableReason}
-              </li>
-            ))}
-        </ul>
-      )}
-
-      <p className="mt-2 text-[10px] text-faint">
-        Largura em escala logarítmica — os números é que carregam a magnitude.
-      </p>
     </div>
   );
 }
@@ -283,6 +270,7 @@ export function ReportDashboard({
   frozenAt,
   reportId,
   saveAction,
+  resultadosAction,
 }: Props) {
   const { meta, headline, funnel, byDimension } = payload;
   const readOnly = !saveAction;
@@ -435,6 +423,14 @@ export function ReportDashboard({
 
         <div className="flex items-center gap-2">
           <a
+            href={printHref + (printHref.includes("?") ? "&" : "?") + "preview=1"}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-ink"
+          >
+            Pré-visualizar
+          </a>
+          <a
             href={printHref}
             target="_blank"
             rel="noreferrer"
@@ -565,6 +561,7 @@ export function ReportDashboard({
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
+                  cursor={{ stroke: CHART_COLORS.hairline, strokeWidth: 1 }}
                   labelFormatter={(l) => (typeof l === "string" ? shortDate(l) : String(l ?? ""))}
                   formatter={(v) => (typeof v === "number" ? fmt(v) : "—")}
                 />
@@ -614,7 +611,12 @@ export function ReportDashboard({
         </div>
 
         <div className="glass rounded-2xl p-4 lg:col-span-2">
-          <h2 className="font-display text-sm font-semibold text-ink">Funil</h2>
+          <h2
+            className="font-display text-sm font-semibold text-ink"
+            title="Largura em escala logarítmica — os números carregam a magnitude. Etapa sem dado aparece hachurada."
+          >
+            Funil
+          </h2>
           <div className="mt-3">
             <Funnel stages={funnel} />
           </div>
@@ -650,6 +652,10 @@ export function ReportDashboard({
               />
               <Tooltip
                 contentStyle={tooltipStyle}
+                /* O cursor padrão do Recharts em BarChart é um retângulo cinza
+                   claro que, sobre fundo escuro, lê como uma barra branca
+                   atravessando o gráfico. */
+                cursor={{ fill: "rgba(255,255,255,0.05)" }}
                 formatter={(v) => (typeof v === "number" ? money(v, meta.currency) : "—")}
               />
               <Bar dataKey="cpa" radius={[0, 4, 4, 0]}>
@@ -697,10 +703,10 @@ export function ReportDashboard({
               <tr key={r.key} className="border-b border-white/5 last:border-0 transition-colors hover:bg-white/[0.03]">
                 <td className="px-4 py-2.5 text-ink">
                   <div className="flex items-center gap-2">
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: colorFor(r.key) }}
-                    />
+                    {/* Só o ponto de estado. O ponto da cor da série saiu: ao
+                        lado do de veiculação viravam dois círculos quase
+                        iguais com significados diferentes, e a legenda do
+                        gráfico já faz o mapeamento cor→série. */}
                     <StatusDot status={r.status} />
                     <span className="truncate">{r.key}</span>
                     <SampleBadge level={r.sample.level} reason={r.sample.reason} />
@@ -779,6 +785,121 @@ export function ReportDashboard({
           </tfoot>
         </table>
       </div>
+
+      {/* resultados de negócio — o que a plataforma de anúncio não enxerga */}
+      {resultadosAction && (
+        <section className="glass mt-4 rounded-2xl p-5">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck size={15} strokeWidth={1.75} className="text-faint" />
+            <h2 className="font-display text-sm font-semibold text-ink">
+              Resultados de negócio
+            </h2>
+          </div>
+          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted">
+            O Meta só sabe que a conversa começou. Quantas viraram oportunidade
+            de verdade, e quantas fecharam, só você sabe — e é o que transforma
+            “custo por conversa” em <strong className="text-ink">custo por cliente</strong>.
+            Números referentes ao período em tela ({longDate(meta.periodStart)} –{" "}
+            {longDate(meta.periodEnd)}).
+          </p>
+          <p className="mt-1 text-[11px] text-faint">
+            Campo vazio = não informado, e a etapa do funil fica pendente. Zero é
+            uma informação diferente: significa que nenhuma conversa avançou.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            {meta.offlinePorCampanha.map((linha) => (
+              <form
+                key={linha.campaignExtId ?? "conta"}
+                action={resultadosAction}
+                className="glass-2 flex flex-wrap items-end gap-3 p-3"
+              >
+                <input type="hidden" name="slug" value={meta.clientSlug} />
+                <input type="hidden" name="from" value={meta.periodStart} />
+                <input type="hidden" name="to" value={meta.periodEnd} />
+                <input
+                  type="hidden"
+                  name="campaignExtId"
+                  value={linha.campaignExtId ?? ""}
+                />
+
+                <span
+                  className="min-w-0 flex-1 truncate text-xs text-ink"
+                  title={linha.campaignName}
+                >
+                  {linha.campaignName}
+                </span>
+
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-faint">
+                    Leads qualificados
+                  </span>
+                  <input
+                    name="qualifiedLeads"
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    defaultValue={linha.qualifiedLeads ?? ""}
+                    placeholder="—"
+                    className="tabular mt-1 w-28 rounded-md border border-white/10 bg-canvas/60 px-2 py-1.5 text-right font-mono text-sm text-ink outline-none focus:border-accent"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-faint">
+                    Vendas fechadas
+                  </span>
+                  <input
+                    name="closedDeals"
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    defaultValue={linha.closedDeals ?? ""}
+                    placeholder="—"
+                    className="tabular mt-1 w-28 rounded-md border border-white/10 bg-canvas/60 px-2 py-1.5 text-right font-mono text-sm text-ink outline-none focus:border-accent"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-ink"
+                >
+                  Salvar
+                </button>
+              </form>
+            ))}
+          </div>
+
+          {(headline.metrics.cplQualified !== null || headline.metrics.cac !== null) && (
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/5 pt-4 sm:grid-cols-4">
+              <KpiCard
+                icon={Target}
+                label="CPL qualificado"
+                value={money(headline.metrics.cplQualified, meta.currency)}
+                denominator={`${money(headline.totals.spend, meta.currency)} / ${count(headline.totals.qualifiedLeads ?? null)} leads`}
+              />
+              <KpiCard
+                icon={Target}
+                label="CAC real"
+                value={money(headline.metrics.cac, meta.currency)}
+                denominator={`${money(headline.totals.spend, meta.currency)} / ${count(headline.totals.closedDeals ?? null)} vendas`}
+              />
+              <KpiCard
+                icon={MessageCircle}
+                label="Conversa → lead"
+                value={pct(headline.metrics.qualificationRate)}
+              />
+              <KpiCard
+                icon={MessageCircle}
+                label="Lead → venda"
+                value={pct(headline.metrics.closeRate)}
+              />
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

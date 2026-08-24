@@ -19,6 +19,14 @@ export interface RawTotals {
   clicks?: number | null;
   linkClicks?: number | null;
   outboundClicks?: number | null;
+  /**
+   * Resultados que a plataforma de anúncio não vê, informados pelo cliente
+   * (offline_results). `null` = ninguém informou ainda, que é diferente de
+   * "informou zero" — e a diferença importa: zero lead qualificado com gasto é
+   * um diagnóstico; "não sei" não é.
+   */
+  qualifiedLeads?: number | null;
+  closedDeals?: number | null;
   /** presente só quando os totais vieram de fact_insights_period; nunca some entre entidades */
   reach?: number;
 }
@@ -35,6 +43,14 @@ export interface DerivedMetrics {
   ctrAll: number | null;
   /** conversions / linkClicks — nunca sobre clicks (docs/04) */
   cvr: number | null;
+  /** spend / leads qualificados — docs/04 */
+  cplQualified: number | null;
+  /** spend / vendas fechadas: o custo de um CLIENTE, não de uma conversa */
+  cac: number | null;
+  /** conversas → lead qualificado */
+  qualificationRate: number | null;
+  /** lead qualificado → venda */
+  closeRate: number | null;
   frequency: number | null;
 }
 
@@ -62,6 +78,10 @@ export function computeMetrics(t: RawTotals): DerivedMetrics {
     ctr: safeDivideNullable(t.linkClicks, t.impressions),
     ctrAll: safeDivideNullable(t.clicks, t.impressions),
     cvr: safeDivideNullable(t.conversions, t.linkClicks),
+    cplQualified: safeDivideNullable(t.spend, t.qualifiedLeads),
+    cac: safeDivideNullable(t.spend, t.closedDeals),
+    qualificationRate: safeDivideNullable(t.qualifiedLeads, t.conversions),
+    closeRate: safeDivideNullable(t.closedDeals, t.qualifiedLeads),
     frequency: t.reach !== undefined ? safeDivide(t.impressions, t.reach) : null,
   };
 }
@@ -85,6 +105,8 @@ export function sumTotals(rows: RawTotals[]): RawTotals {
       clicks: addNullable(acc.clicks, r.clicks),
       linkClicks: addNullable(acc.linkClicks, r.linkClicks),
       outboundClicks: addNullable(acc.outboundClicks, r.outboundClicks),
+      qualifiedLeads: addNullable(acc.qualifiedLeads, r.qualifiedLeads),
+      closedDeals: addNullable(acc.closedDeals, r.closedDeals),
       // reach deliberadamente NÃO acumulado — não é aditivo entre entidades
     }),
     {
@@ -94,6 +116,8 @@ export function sumTotals(rows: RawTotals[]): RawTotals {
       clicks: null,
       linkClicks: null,
       outboundClicks: null,
+      qualifiedLeads: null,
+      closedDeals: null,
     }
   );
 }

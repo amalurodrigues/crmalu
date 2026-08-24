@@ -111,6 +111,17 @@ export interface ReportPayload {
     /** campanha em escopo; null = conta inteira */
     campaignExtId: string | null;
     campaignName: string | null;
+    /**
+     * Resultados de negócio já informados no período, por campanha. Alimenta o
+     * formulário de edição — `null` num campo significa "ninguém informou",
+     * que a UI precisa distinguir de "informou zero".
+     */
+    offlinePorCampanha: Array<{
+      campaignExtId: string | null;
+      campaignName: string;
+      qualifiedLeads: number | null;
+      closedDeals: number | null;
+    }>;
     generatedAt: string;
     /** avisos herdados do import — export sem coluna de ID, etc. */
     caveats: string[];

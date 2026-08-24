@@ -6,6 +6,7 @@ import {
   factInsightsDaily,
   factActionsDaily,
   importRuns,
+  offlineResults,
 } from "@tego/db";
 import { sumTotals, computeMetrics, sampleVerdict, type RawTotals } from "@tego/metrics";
 import { eq, inArray, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -253,7 +254,49 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
   const periodEnd = dates[dates.length - 1];
   const periodDays = daysBetweenInclusive(periodStart, periodEnd);
 
-  const grandTotals = sumTotals(cells.map((c) => c.totals));
+  /**
+   * Resultados de negócio informados (lead qualificado, venda). Vêm por período
+   * e por campanha, não por criativo: ninguém sabe de qual anúncio veio a
+   * conversa que virou cliente, e inventar essa atribuição produziria um CAC
+   * por criativo que não corresponde a nada.
+   *
+   * Por isso só entram no TOTAL e no funil — as linhas de quebra continuam
+   * parando em "conversa iniciada".
+   */
+  const offline = await db
+    .select()
+    .from(offlineResults)
+    .where(
+      and(
+        eq(offlineResults.clientId, client.id),
+        gte(offlineResults.date, from),
+        lte(offlineResults.date, to)
+      )
+    );
+
+  const offlineNoEscopo = offline.filter((o) =>
+    scopedCampaign ? o.campaignExtId === scopedCampaign : true
+  );
+  /** valor informado para UMA campanha (ou para a conta, com null) e uma métrica */
+  const valorOffline = (campanha: string | null, chave: string): number | null => {
+    const linhas = offline.filter(
+      (o) => o.campaignExtId === campanha && o.metricKey === chave
+    );
+    if (linhas.length === 0) return null;
+    return linhas.reduce((a, o) => a + Number(o.value), 0);
+  };
+
+  const somaOffline = (chave: string): number | null => {
+    const linhas = offlineNoEscopo.filter((o) => o.metricKey === chave);
+    if (linhas.length === 0) return null; // ninguém informou ≠ informou zero
+    return linhas.reduce((a, o) => a + Number(o.value), 0);
+  };
+
+  const grandTotals = {
+    ...sumTotals(cells.map((c) => c.totals)),
+    qualifiedLeads: somaOffline("qualified_leads"),
+    closedDeals: somaOffline("closed_deals"),
+  };
   const targetCpa = client.targetCpa === null ? null : Number(client.targetCpa);
 
   // ---- quebras por dimensão -------------------------------------------------
@@ -369,9 +412,20 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
     {
       key: "qualified_leads",
       label: "Leads qualificados",
-      value: null,
+      value: grandTotals.qualifiedLeads,
       unavailableReason:
-        "Depende de dado de CRM, que não é ingerido nesta fase (docs/08-roadmap.md).",
+        grandTotals.qualifiedLeads === null
+          ? "Ninguém informou ainda. Preencha em “Resultados de negócio”, abaixo do relatório."
+          : undefined,
+    },
+    {
+      key: "closed_deals",
+      label: "Vendas fechadas",
+      value: grandTotals.closedDeals,
+      unavailableReason:
+        grandTotals.closedDeals === null
+          ? "Ninguém informou ainda. Preencha em “Resultados de negócio”, abaixo do relatório."
+          : undefined,
     },
   ];
 
@@ -405,6 +459,20 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       dataEnd,
       targetCpa,
       campaigns,
+      offlinePorCampanha: [
+        ...campaigns.map((c) => ({
+          campaignExtId: c.extId,
+          campaignName: c.name,
+          qualifiedLeads: valorOffline(c.extId, "qualified_leads"),
+          closedDeals: valorOffline(c.extId, "closed_deals"),
+        })),
+        {
+          campaignExtId: null,
+          campaignName: "Conta inteira (sem separar por campanha)",
+          qualifiedLeads: valorOffline(null, "qualified_leads"),
+          closedDeals: valorOffline(null, "closed_deals"),
+        },
+      ],
       campaignExtId: scopedCampaign,
       campaignName: scopedCampaign
         ? campaigns.find((c) => c.extId === scopedCampaign)?.name ?? null

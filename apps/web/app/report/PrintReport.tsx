@@ -1,6 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
+import { PRINT_PALETTE, PRINT_COLORS } from "../../lib/chart-colors";
 import { DIMENSION_LABELS, type DimensionKey, type ReportPayload } from "./types";
 
 /**
@@ -10,10 +21,15 @@ import { DIMENSION_LABELS, type DimensionKey, type ReportPayload } from "./types
  * desta rota, nunca de uma biblioteca de PDF separada (que divergiria do painel
  * em duas semanas).
  *
- * Sem gráfico: Recharts mede o container para desenhar, e o diálogo de impressão
- * dispara antes do layout estabilizar — o resultado é eixo cortado ou área
- * vazia. Tabela imprime igual em toda impressora e é o que sustenta discussão
- * em reunião de qualquer forma.
+ * Os gráficos usam dimensão FIXA em pixels, não ResponsiveContainer, e animação
+ * desligada. É a diferença entre ter gráfico no PDF e não ter: o
+ * ResponsiveContainer mede o elemento pai depois da montagem e desenha no frame
+ * seguinte, e o diálogo de impressão dispara antes disso — sai eixo cortado ou
+ * área em branco. Com largura fixa, o SVG nasce completo no primeiro render.
+ *
+ * A impressão ainda espera as fontes carregarem e dois frames de layout, porque
+ * fonte que assenta depois muda a métrica do texto e reflui a tabela no meio da
+ * geração.
  */
 export function PrintReport({
   payload,
@@ -28,14 +44,30 @@ export function PrintReport({
 }) {
   const { meta, headline, funnel, byDimension } = payload;
 
+  /**
+   * `pronto` gate SÓ a chamada de impressão, nunca a renderização do gráfico.
+   *
+   * Com dimensão fixa o Recharts desenha no servidor também, então o SVG já vem
+   * completo no HTML — antes de qualquer hidratação. Condicionar o gráfico à
+   * montagem no cliente reintroduziria exatamente a corrida que a dimensão fixa
+   * elimina, e um PDF gerado antes da hidratação sairia com buracos.
+   */
+  const [pronto, setPronto] = useState(false);
+  useEffect(() => setPronto(true), []);
+
   useEffect(() => {
-    if (!autoPrint) return;
-    // Espera as fontes assentarem: imprimir antes delas carregarem muda a
-    // métrica do texto e reflui a tabela no meio da geração.
-    const go = () => window.print();
-    if (document.fonts?.ready) document.fonts.ready.then(() => setTimeout(go, 120));
-    else setTimeout(go, 400);
-  }, [autoPrint]);
+    if (!autoPrint || !pronto) return;
+    let cancelado = false;
+    const imprimir = () => {
+      if (cancelado) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+    };
+    const fontes = document.fonts?.ready ?? Promise.resolve();
+    fontes.then(() => setTimeout(imprimir, 250));
+    return () => {
+      cancelado = true;
+    };
+  }, [autoPrint, pronto]);
 
   const money = (v: number | null) =>
     v === null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: meta.currency });
@@ -48,6 +80,18 @@ export function PrintReport({
   };
 
   const dimensionsToPrint: DimensionKey[] = ["campanha", "conjunto", "criativo"];
+
+  const LARGURA = 780; // cabe em A4 retrato com margem de 12mm
+
+  /**
+   * Quebra usada nos gráficos: criativo quando há mais de um, senão campanha.
+   * Gráfico de uma série só não compara nada — se o recorte tem um criativo
+   * apenas, a comparação útil passa a ser entre campanhas.
+   */
+  const dimensaoDoGrafico: DimensionKey =
+    byDimension.criativo.keys.length > 1 ? "criativo" : "campanha";
+  const sliceDoGrafico = byDimension[dimensaoDoGrafico];
+  const serieDiaria = sliceDoGrafico.series.spend;
 
   return (
     <div className="print-root mx-auto max-w-4xl bg-white p-8 text-[#111] print:p-0">
@@ -127,6 +171,89 @@ export function PrintReport({
           </tbody>
         </table>
       </section>
+
+      {/* gráficos — mesmos dados das tabelas, em dimensão fixa para o papel */}
+      {serieDiaria.length > 0 && (
+        <section className="print-block mt-6">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wider">
+            Gasto diário por {DIMENSION_LABELS[dimensaoDoGrafico].toLowerCase()}
+          </h2>
+          <LineChart
+            width={LARGURA}
+            height={200}
+            data={serieDiaria}
+            margin={{ top: 8, right: 12, left: -8, bottom: 0 }}
+          >
+            <CartesianGrid stroke={PRINT_COLORS.grid} vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickFormatter={(d: string) => d.slice(8) + "/" + d.slice(5, 7)}
+              tick={{ fill: PRINT_COLORS.axis, fontSize: 9 }}
+              axisLine={{ stroke: PRINT_COLORS.grid }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: PRINT_COLORS.axis, fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+              width={46}
+            />
+            {sliceDoGrafico.keys.map((k, i) => (
+              <Line
+                key={k}
+                type="monotone"
+                dataKey={k}
+                stroke={PRINT_PALETTE[i % PRINT_PALETTE.length]}
+                strokeWidth={1.75}
+                dot={false}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            {sliceDoGrafico.keys.map((k, i) => (
+              <span key={k} className="flex items-center gap-1.5 text-[9px] text-[#40474f]">
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: PRINT_PALETTE[i % PRINT_PALETTE.length] }}
+                />
+                {k}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {sliceDoGrafico.rows.length > 0 && (
+        <section className="print-block mt-6">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wider">
+            Custo por conversa, por {DIMENSION_LABELS[dimensaoDoGrafico].toLowerCase()}
+          </h2>
+          <BarChart
+            width={LARGURA}
+            height={Math.max(sliceDoGrafico.rows.length * 26 + 30, 110)}
+            data={sliceDoGrafico.rows.map((r) => ({ key: r.key, cpa: r.metrics.cpa }))}
+            layout="vertical"
+            margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid stroke={PRINT_COLORS.grid} horizontal={false} />
+            <XAxis type="number" tick={{ fill: PRINT_COLORS.axis, fontSize: 9 }} axisLine={false} tickLine={false} />
+            <YAxis
+              type="category"
+              dataKey="key"
+              tick={{ fill: PRINT_COLORS.axis, fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+              width={140}
+            />
+            <Bar dataKey="cpa" radius={[0, 3, 3, 0]} isAnimationActive={false}>
+              {sliceDoGrafico.rows.map((r, i) => (
+                <Cell key={r.key} fill={PRINT_PALETTE[i % PRINT_PALETTE.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </section>
+      )}
 
       {/* quebras */}
       {dimensionsToPrint.map((dim) => {

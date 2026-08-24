@@ -40,3 +40,27 @@ export const SERIES_PALETTE = [
   "#f7a85c", // laranja
   "#ff9ecb", // rosa
 ];
+
+/**
+ * Paleta para PAPEL. As cores acima são calibradas para fundo escuro e ficam
+ * lavadas sobre branco — luminância alta contra fundo claro é o mesmo problema
+ * do inverso. Aqui os tons são escuros e saturados, na mesma ORDEM de matiz da
+ * paleta de tela, para que a terceira série continue sendo a terceira série
+ * quando o cliente compara a tela e o PDF impresso.
+ */
+export const PRINT_PALETTE = [
+  "#1d4ed8", // azul
+  "#a16207", // amarelo escurecido
+  "#0f766e", // verde-água
+  "#7e22ce", // lavanda
+  "#b91c1c", // coral
+  "#4d7c0f", // verde-limão
+  "#c2410c", // laranja
+  "#be185d", // rosa
+];
+
+export const PRINT_COLORS = {
+  axis: "#5b6675",
+  grid: "#e3e7ec",
+  ink: "#111111",
+} as const;

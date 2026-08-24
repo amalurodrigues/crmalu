@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ReportDashboard } from "./ReportDashboard";
 import { loadReportPayload } from "./load";
-import { saveReport } from "./actions";
+import { saveReport, salvarResultados } from "./actions";
 import { defaultTitle } from "./types";
 
 export const runtime = "nodejs"; // precisa de Node (pg), não Edge
@@ -48,6 +48,7 @@ export default async function ReportPage({
         payload.meta.periodEnd
       )}
       saveAction={saveReport}
+      resultadosAction={salvarResultados}
     />
   );
 }
