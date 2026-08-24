@@ -97,6 +97,11 @@ export interface ReportPayload {
     dataEnd: string;
     /** meta de CPA do cliente; null = sem meta, gráfico sem linha de referência */
     targetCpa: number | null;
+    /** campanhas da conta, para o seletor de escopo */
+    campaigns: Array<{ extId: string; name: string }>;
+    /** campanha em escopo; null = conta inteira */
+    campaignExtId: string | null;
+    campaignName: string | null;
     generatedAt: string;
     /** avisos herdados do import — export sem coluna de ID, etc. */
     caveats: string[];

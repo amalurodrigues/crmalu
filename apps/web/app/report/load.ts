@@ -51,6 +51,12 @@ export interface LoadOptions {
   /** recorte de datas 'YYYY-MM-DD'; ausente = todo o período disponível */
   from?: string;
   to?: string;
+  /**
+   * external_id da campanha a isolar. Ausente = conta inteira.
+   * Recorta TUDO — KPI, funil e todas as quebras — para que o relatório de uma
+   * campanha seja um relatório completo dela, não um filtro parcial.
+   */
+  campaign?: string;
 }
 
 export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportPayload | null> {
@@ -208,8 +214,25 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
     conversionsByEntityDate.set(k, (conversionsByEntityDate.get(k) ?? 0) + Number(a.count));
   }
 
+  /** Campanha de cada anúncio, subindo dois níveis pela hierarquia. */
+  const campaignExtIdOfAd = new Map<string, string | null>();
+  for (const ad of adEntities) {
+    const adset = ad.parentExtId ? entityByExtId.get(ad.parentExtId) : undefined;
+    campaignExtIdOfAd.set(ad.id, adset?.parentExtId ?? null);
+  }
+
+  const campaigns = entities
+    .filter((e) => e.level === "campaign")
+    .map((e) => ({ extId: e.externalId, name: e.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  const scopedCampaign =
+    opts.campaign && campaigns.some((c) => c.extId === opts.campaign) ? opts.campaign : null;
+
   // Grão base: uma célula RawTotals por (entidade, data). Tudo abaixo é soma disto.
-  const cells = insights.map((i) => ({
+  const cells = insights
+    .filter((i) => !scopedCampaign || campaignExtIdOfAd.get(i.entityId) === scopedCampaign)
+    .map((i) => ({
     entityId: i.entityId,
     date: i.date,
     totals: {
@@ -222,6 +245,8 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       outboundClicks: i.outboundClicks,
     } as RawTotals,
   }));
+
+  if (cells.length === 0) return null;
 
   const dates = [...new Set(cells.map((c) => c.date))].sort();
   const periodStart = dates[0];
@@ -360,6 +385,11 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       dataStart,
       dataEnd,
       targetCpa,
+      campaigns,
+      campaignExtId: scopedCampaign,
+      campaignName: scopedCampaign
+        ? campaigns.find((c) => c.extId === scopedCampaign)?.name ?? null
+        : null,
       generatedAt: new Date().toISOString(),
       caveats: lastImport?.warnings ?? [],
     },

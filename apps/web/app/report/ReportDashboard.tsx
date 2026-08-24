@@ -23,6 +23,8 @@ import {
   History,
   TriangleAlert,
   CalendarRange,
+  FileDown,
+  Layers,
 } from "lucide-react";
 import { CHART_COLORS, SERIES_PALETTE } from "../../lib/chart-colors";
 import {
@@ -42,6 +44,8 @@ interface Props {
   title: string;
   /** snapshot salvo — sem edição, com carimbo de quando foi congelado */
   frozenAt?: string;
+  /** id do relatório salvo, para a rota de impressão */
+  reportId?: string;
   saveAction?: (formData: FormData) => void;
 }
 
@@ -146,51 +150,113 @@ function Segmented<T extends string>({
   );
 }
 
-/** Funil em barras horizontais com taxa entre etapas — docs/06. */
+/**
+ * Funil com forma real.
+ *
+ * docs/06 proíbe "funil decorativo sem número" — o que ele proíbe é a ausência
+ * do número, não a forma. Cada etapa carrega o valor absoluto e a taxa contra a
+ * etapa anterior disponível.
+ *
+ * A largura usa escala LOGARÍTMICA e o rótulo diz isso. De 30.356 impressões
+ * para 27 conversas há três ordens de grandeza: em escala linear as duas
+ * últimas etapas virariam um fio de um pixel, e o gráfico deixaria de informar
+ * exatamente onde está o vazamento. O número escrito em cima é o que carrega a
+ * magnitude; a forma carrega a sequência.
+ */
 function Funnel({ stages }: { stages: ReportPayload["funnel"] }) {
-  const max = Math.max(...stages.map((s) => s.value ?? 0), 1);
+  const base = stages.find((s) => s.value !== null)?.value ?? 1;
+  const MIN = 16; // piso em %, para etapa indisponível ainda ter corpo clicável
+
+  const widthOf = (v: number | null) =>
+    v === null ? MIN : Math.max(MIN, (Math.log(v + 1) / Math.log(base + 1)) * 100);
+
   return (
-    <div className="space-y-2.5">
-      {stages.map((s) => {
-        const available = s.value !== null;
-        const widthPct = available ? Math.max((s.value! / max) * 100, 1.5) : 100;
-        return (
-          <div key={s.key}>
-            <div className="flex items-baseline justify-between text-xs">
-              <span className={available ? "text-ink" : "text-faint"}>{s.label}</span>
-              <span className="tabular font-mono text-ink">
-                {available ? count(s.value) : "—"}
-                {s.rateFromPrev !== null && (
-                  <span className="ml-2 text-faint">{pct(s.rateFromPrev)}</span>
-                )}
-              </span>
-            </div>
-            <div className="mt-1 h-2 overflow-hidden rounded-sm bg-canvas">
-              {available ? (
+    <div>
+      <div className="space-y-1">
+        {stages.map((s, i) => {
+          const next = stages[i + 1];
+          const wTop = widthOf(s.value);
+          const wBottom = next ? widthOf(next.value) : wTop * 0.82;
+          const available = s.value !== null;
+
+          // trapézio: converge do topo para a base, centralizado
+          const clip = `polygon(${(100 - wTop) / 2}% 0%, ${(100 + wTop) / 2}% 0%, ${
+            (100 + wBottom) / 2
+          }% 100%, ${(100 - wBottom) / 2}% 100%)`;
+
+          const color = SERIES_PALETTE[i % SERIES_PALETTE.length];
+
+          return (
+            <div key={s.key}>
+              <div className="relative h-[62px]">
                 <div
-                  className="h-full rounded-sm"
-                  style={{ width: `${widthPct}%`, background: CHART_COLORS.accent }}
+                  className="absolute inset-0"
+                  style={{
+                    clipPath: clip,
+                    background: available
+                      ? `linear-gradient(180deg, ${color}55, ${color}22)`
+                      : "repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, transparent 6px 12px)",
+                    border: available ? "none" : undefined,
+                  }}
                 />
-              ) : (
-                <div
-                  className="h-full w-full rounded-sm border border-dashed border-hairline"
-                  title={s.unavailableReason}
-                />
+                <div className="relative flex h-full flex-col items-center justify-center">
+                  <span
+                    className={
+                      "tabular font-mono text-lg font-medium leading-none " +
+                      (available ? "text-ink" : "text-faint")
+                    }
+                  >
+                    {available ? count(s.value) : "—"}
+                  </span>
+                  <span className="mt-1 text-[11px] text-muted">{s.label}</span>
+                </div>
+              </div>
+
+              {/* taxa de passagem, no estrangulamento entre as etapas */}
+              {next && (
+                <div className="flex items-center justify-center py-0.5">
+                  {next.rateFromPrev !== null ? (
+                    <span className="tabular rounded-full border border-white/10 bg-canvas/70 px-2 py-0.5 font-mono text-[10px] text-muted">
+                      ↓ {pct(next.rateFromPrev)}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-faint">↓</span>
+                  )}
+                </div>
               )}
             </div>
-            {!available && (
-              <p className="mt-1 text-[11px] leading-snug text-faint">{s.unavailableReason}</p>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {stages.some((s) => s.unavailableReason) && (
+        <ul className="mt-3 space-y-1 border-t border-white/5 pt-3">
+          {stages
+            .filter((s) => s.unavailableReason)
+            .map((s) => (
+              <li key={s.key} className="text-[11px] leading-snug text-faint">
+                <span className="text-muted">{s.label}:</span> {s.unavailableReason}
+              </li>
+            ))}
+        </ul>
+      )}
+
+      <p className="mt-2 text-[10px] text-faint">
+        Largura em escala logarítmica — os números é que carregam a magnitude.
+      </p>
     </div>
   );
 }
 
 // ------------------------------------------------------------------ principal
 
-export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props) {
+export function ReportDashboard({
+  payload,
+  title,
+  frozenAt,
+  reportId,
+  saveAction,
+}: Props) {
   const { meta, headline, funnel, byDimension } = payload;
   const readOnly = !saveAction;
 
@@ -208,6 +274,22 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
     initial("dim", DIMENSIONS, "criativo")
   );
   const [metric, setMetric] = useState<MetricKey>(() => initial("m", METRICS, "spend"));
+  const [titleValue, setTitleValue] = useState(title);
+
+  /**
+   * Link de impressão. Relatório salvo imprime o snapshot pelo id; o vivo leva o
+   * recorte inteiro na querystring para o papel sair igual à tela.
+   */
+  const printHref = reportId
+    ? `/report/${reportId}/print`
+    : "/report/print?" +
+      new URLSearchParams({
+        slug: meta.clientSlug,
+        from: meta.periodStart,
+        to: meta.periodEnd,
+        ...(meta.campaignExtId ? { campaign: meta.campaignExtId } : {}),
+        title: titleValue,
+      }).toString();
 
   const syncUrl = (next: Record<string, string>) => {
     if (typeof window === "undefined") return;
@@ -242,7 +324,8 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
             <input
               name="title"
               form="save-report"
-              defaultValue={title}
+              value={titleValue}
+              onChange={(e) => setTitleValue(e.target.value)}
               aria-label="Título do relatório"
               className="w-full min-w-0 rounded border border-transparent bg-transparent px-1
                          font-display text-3xl font-bold tracking-tight text-ink outline-none
@@ -260,6 +343,26 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
           {!readOnly && (
             <form method="get" action="/report" className="mt-3 flex flex-wrap items-center gap-2">
               <input type="hidden" name="slug" value={meta.clientSlug} />
+
+              {meta.campaigns.length > 0 && (
+                <>
+                  <Layers size={13} strokeWidth={1.75} className="text-faint" />
+                  <select
+                    name="campaign"
+                    aria-label="Campanha"
+                    defaultValue={meta.campaignExtId ?? ""}
+                    className="max-w-[16rem] rounded-md border border-white/10 bg-canvas/60 px-2 py-1 text-xs text-muted outline-none focus:border-accent"
+                  >
+                    <option value="">Todas as campanhas</option>
+                    {meta.campaigns.map((c) => (
+                      <option key={c.extId} value={c.extId}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
               <CalendarRange size={13} strokeWidth={1.75} className="text-faint" />
               <input
                 type="date"
@@ -305,6 +408,15 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
 
         <div className="flex items-center gap-2">
           <a
+            href={printHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-ink"
+          >
+            <FileDown size={13} strokeWidth={1.75} />
+            PDF
+          </a>
+          <a
             href="/report/historico"
             className="inline-flex items-center gap-1.5 rounded-md border border-hairline
                        px-3 py-1.5 text-xs text-muted transition-colors hover:text-ink"
@@ -317,6 +429,7 @@ export function ReportDashboard({ payload, title, frozenAt, saveAction }: Props)
               <input type="hidden" name="slug" value={meta.clientSlug} />
               <input type="hidden" name="from" value={meta.periodStart} />
               <input type="hidden" name="to" value={meta.periodEnd} />
+              <input type="hidden" name="campaign" value={meta.campaignExtId ?? ""} />
               <button
                 type="submit"
                 className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5

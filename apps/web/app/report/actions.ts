@@ -24,8 +24,9 @@ export async function saveReport(formData: FormData) {
   const slug = String(formData.get("slug") ?? "") || undefined;
   const from = String(formData.get("from") ?? "") || undefined;
   const to = String(formData.get("to") ?? "") || undefined;
+  const campaign = String(formData.get("campaign") ?? "") || undefined;
 
-  const payload = await loadReportPayload({ slug, from, to });
+  const payload = await loadReportPayload({ slug, from, to, campaign });
   if (!payload) throw new Error("Não há dado suficiente para salvar um relatório.");
 
   const [client] = await db

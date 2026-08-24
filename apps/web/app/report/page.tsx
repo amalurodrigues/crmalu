@@ -10,10 +10,15 @@ export const dynamic = "force-dynamic"; // sempre reconsulta — dado muda a cad
 export default async function ReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ slug?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ slug?: string; from?: string; to?: string; campaign?: string }>;
 }) {
   const sp = await searchParams;
-  const payload = await loadReportPayload({ slug: sp.slug, from: sp.from, to: sp.to });
+  const payload = await loadReportPayload({
+    slug: sp.slug,
+    from: sp.from,
+    to: sp.to,
+    campaign: sp.campaign,
+  });
 
   if (!payload) {
     return (

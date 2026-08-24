@@ -1,32 +1,26 @@
 import { db, reports } from "@tego/db";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { ReportDashboard } from "../ReportDashboard";
-import type { ReportPayload } from "../types";
+import { PrintReport } from "../../PrintReport";
+import type { ReportPayload } from "../../types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Relatório congelado. Renderiza `reports.payload` como foi salvo — nunca
- * reconsulta os fatos, senão o número muda debaixo do cliente e o histórico
- * deixa de servir para o que existe (docs/02, docs/05).
+ * Rota de impressão do relatório CONGELADO. É esta rota que o Playwright deve
+ * consumir quando a geração de PDF virar server-side (CLAUDE.md § 4) — um só
+ * código para tela e papel.
  */
-export default async function SavedReportPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function SavedPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-
   const [row] = await db.select().from(reports).where(eq(reports.id, id));
   if (!row) notFound();
 
   return (
-    <ReportDashboard
+    <PrintReport
       payload={row.payload as ReportPayload}
       title={row.title}
-      reportId={row.id}
       frozenAt={row.generatedAt.toISOString()}
     />
   );

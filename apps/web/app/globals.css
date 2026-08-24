@@ -131,6 +131,11 @@ body::before {
   um print desta mesma tela. Vidro e halos viram fundo branco e borda sólida —
   backdrop-filter não imprime e o gradiente escuro come toner.
 */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
 @media print {
   body {
     background: #fff;
@@ -138,6 +143,26 @@ body::before {
   }
   body::before {
     display: none;
+  }
+
+  /* a navegação do painel não existe no papel */
+  aside,
+  [data-print-hide] {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  /* docs/05: cards não podem partir no meio da página */
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
   }
   .glass {
     background: #fff;
