@@ -14,19 +14,46 @@ import { eq } from "drizzle-orm";
  *   npx tsx scripts/set-password.ts operador@exemplo.com
  */
 
-function perguntaSenha(rotulo: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
-    if (!stdin.isTTY) {
-      reject(
-        new Error(
-          "stdin não é um terminal. Rode este script direto no terminal — " +
-            "sem pipe, para a senha não vir de um arquivo ou do histórico."
-        )
-      );
-      return;
-    }
+/**
+ * Digitação visível, para terminais sem modo raw.
+ *
+ * Terminal integrado de editor costuma não expor TTY, e a primeira versão deste
+ * script simplesmente RECUSAVA rodar nesse caso — o que trancou a operadora
+ * para fora do próprio painel. Recusar não protegia ninguém: a senha continuava
+ * tendo que ser definida de algum jeito, e o jeito que sobrava era pior.
+ *
+ * Aqui a senha aparece na tela enquanto é digitada. É menos discreto do que o
+ * modo raw, mas continua fora do histórico de shell e da lista de processos,
+ * que são as duas superfícies que realmente vazam.
+ */
+let rlCompartilhada: import("node:readline/promises").Interface | null = null;
 
+async function perguntaVisivel(rotulo: string): Promise<string> {
+  // UMA interface para todas as perguntas: fechar uma interface de readline
+  // fecha o stdin junto, e a pergunta seguinte receberia string vazia sem
+  // nunca esperar o usuário digitar.
+  if (!rlCompartilhada) {
+    const { createInterface } = await import("node:readline/promises");
+    rlCompartilhada = createInterface({ input: process.stdin, output: process.stdout });
+  }
+  return rlCompartilhada.question(rotulo);
+}
+
+function fecharPrompt() {
+  rlCompartilhada?.close();
+  rlCompartilhada = null;
+}
+
+function perguntaSenha(rotulo: string): Promise<string> {
+  const stdin = process.stdin;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== "function") {
+    if (!rlCompartilhada) {
+      console.warn("  (terminal sem modo oculto — a senha aparece enquanto você digita)");
+    }
+    return perguntaVisivel(rotulo);
+  }
+
+  return new Promise((resolve) => {
     process.stdout.write(rotulo);
     stdin.setRawMode(true);
     stdin.resume();
@@ -99,10 +126,12 @@ async function main() {
     console.log(`\nOperador criado: ${novo.email} (${novo.id}).`);
   }
 
+  fecharPrompt();
   await pool.end();
 }
 
 main().catch(async (err) => {
+  fecharPrompt();
   console.error(err);
   await pool.end();
   process.exit(1);

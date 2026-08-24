@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@tego/db";
 import { AuthError } from "next-auth";
 import { LogIn, ShieldCheck } from "lucide-react";
 import { signIn } from "../../auth";
@@ -29,9 +31,17 @@ async function login(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; criado?: string }>;
 }) {
-  const { erro } = await searchParams;
+  // Banco sem usuário nenhum: mandar para a criação em vez de mostrar um
+  // formulário que não tem como aceitar ninguém.
+  const contagem = await db.execute<{ n: number }>(sql`select count(*)::int as n from users`);
+  const linhas =
+    (contagem as unknown as { rows?: Array<{ n: number }> }).rows ??
+    (contagem as unknown as Array<{ n: number }>);
+  if (Number(linhas[0]?.n ?? 0) === 0) redirect("/setup");
+
+  const { erro, criado } = await searchParams;
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center">
@@ -73,6 +83,15 @@ export default async function LoginPage({
               className="mt-1 w-full rounded-md border border-white/10 bg-canvas/60 px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-accent"
             />
           </label>
+
+          {criado && (
+            <p
+              role="status"
+              className="rounded-md border border-good/30 bg-good/10 px-3 py-2 text-xs text-good"
+            >
+              Conta criada. Entre com ela.
+            </p>
+          )}
 
           {erro && (
             /* mensagem única para e-mail inexistente e senha errada: distinguir

@@ -82,17 +82,25 @@ Isso grava o segredo no `.env` local. Para a Vercel, gere **outro** e cole em
 Settings → Environment Variables com o nome `AUTH_SECRET`. Segredo de produção
 não deve ser o mesmo do seu notebook.
 
-**2. Criar o operador** — a senha é digitada, nunca passada por argumento ou
-variável de ambiente (as duas vazam em histórico de shell e em lista de
-processos):
+**2. Criar o operador.** Com o banco ainda sem nenhum usuário, o painel
+redireciona sozinho para `/setup`, que mostra um formulário de primeiro acesso.
+Essa rota é pública porque precisa ser — não há como logar antes de existir um
+login — e se fecha sozinha no instante em que a primeira conta existe. A
+inserção é um único `insert … where not exists`, então dois envios simultâneos
+não criam duas contas: o banco decide.
+
+Para trocar a senha depois, ou criar outros usuários, use o script:
 
 ```bash
 npx tsx scripts/set-password.ts voce@exemplo.com
 ```
 
-O script grava direto no banco apontado pelo `DATABASE_URL` — se o `.env`
-aponta para o Neon de produção, o usuário nasce em produção. Rode o mesmo
-comando de novo para trocar a senha.
+Ele grava direto no banco apontado pelo `DATABASE_URL` — se o `.env` aponta
+para o Neon de produção, o usuário nasce em produção. A senha é digitada, nunca
+passada por argumento ou variável de ambiente (as duas vazam em histórico de
+shell e em lista de processos). Em terminal sem modo oculto — o integrado de
+editor, tipicamente — ele avisa e passa a mostrar o que você digita, em vez de
+recusar rodar.
 
 ### Como está montado
 

@@ -2,12 +2,14 @@ import type { NextAuthConfig } from "next-auth";
 
 /**
  * Rotas que respondem sem sessão. Lista fechada e curta: os endpoints da
- * própria autenticação (sem eles não haveria como logar) e o favicon.
+ * própria autenticação (sem eles não haveria como logar), o favicon, e a tela
+ * de primeiro acesso — que é pública porque precisa ser, e se fecha sozinha no
+ * instante em que o primeiro usuário existe (ver app/setup/page.tsx).
  *
  * Casamento por segmento, não por prefixo de string: `startsWith("/api/auth")`
  * também liberaria `/api/authorized-secreto`. Aqui `/api/auth-falso` não passa.
  */
-const ROTAS_PUBLICAS = ["/api/auth", "/favicon.ico"];
+const ROTAS_PUBLICAS = ["/api/auth", "/favicon.ico", "/setup"];
 
 function ehPublica(pathname: string): boolean {
   return ROTAS_PUBLICAS.some((r) => pathname === r || pathname.startsWith(r + "/"));
