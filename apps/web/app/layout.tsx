@@ -37,7 +37,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </aside>
 
-          <div className="flex-1">
+          {/* min-w-0: um flex item tem min-width:auto e não encolhe abaixo do
+              min-content do filho. Sem isto, a tabela larga do relatório empurra
+              o layout inteiro e a página ganha scroll horizontal em vez de a
+              tabela rolar dentro do próprio overflow-x-auto. */}
+          <div className="min-w-0 flex-1">
             <header className="flex items-center justify-between border-b border-hairline px-4 py-3 sm:hidden">
               <span className="font-mono text-sm font-semibold">tego</span>
               <nav className="flex gap-4 text-sm text-muted">

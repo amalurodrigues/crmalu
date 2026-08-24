@@ -107,6 +107,9 @@ export async function importParsedRows(
         attributionWindow: row.attributionWindow,
         impressions: row.impressions,
         spend: row.spend.toFixed(6),
+        clicks: row.clicks,
+        linkClicks: row.linkClicks,
+        outboundClicks: row.outboundClicks,
         reach: row.reach,
         currency: row.currency,
       })
@@ -115,6 +118,9 @@ export async function importParsedRows(
         set: {
           impressions: row.impressions,
           spend: row.spend.toFixed(6),
+          clicks: row.clicks,
+          linkClicks: row.linkClicks,
+          outboundClicks: row.outboundClicks,
           reach: row.reach,
           fetchedAt: new Date(),
         },

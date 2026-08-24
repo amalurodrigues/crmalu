@@ -1,0 +1,98 @@
+/**
+ * Forma do payload de relatório. É este objeto que vai congelado para
+ * `reports.payload` (docs/02, docs/05) e é o mesmo que a UI renderiza — se as
+ * duas formas divergirem, relatório salvo e relatório vivo passam a mostrar
+ * coisas diferentes, que é exatamente o que o congelamento existe para evitar.
+ *
+ * Nenhuma métrica derivada é calculada no cliente. Tudo que é divisão vem
+ * pronto daqui, calculado em packages/metrics (CLAUDE.md § 2.2).
+ */
+import type { RawTotals, DerivedMetrics, SampleVerdict } from "@tego/metrics";
+
+/** Dimensões pelas quais o relatório pode ser quebrado. */
+export const DIMENSIONS = ["vertical", "canal", "temperatura", "criativo"] as const;
+export type DimensionKey = (typeof DIMENSIONS)[number];
+
+export const DIMENSION_LABELS: Record<DimensionKey, string> = {
+  vertical: "Vertical",
+  canal: "Canal",
+  temperatura: "Temperatura",
+  criativo: "Criativo",
+};
+
+/** Métricas plotáveis na série temporal. */
+export const METRICS = ["spend", "conversions", "cpa"] as const;
+export type MetricKey = (typeof METRICS)[number];
+
+export const METRIC_LABELS: Record<MetricKey, string> = {
+  spend: "Gasto",
+  conversions: "Conversas",
+  cpa: "CPA",
+};
+
+/** `money` formata como moeda; `count` como inteiro. */
+export const METRIC_FORMAT: Record<MetricKey, "money" | "count"> = {
+  spend: "money",
+  conversions: "count",
+  cpa: "money",
+};
+
+export interface BreakdownRow {
+  key: string;
+  totals: RawTotals;
+  metrics: DerivedMetrics;
+  sample: SampleVerdict;
+}
+
+/** Um ponto por data; as chaves restantes são os valores de cada série. */
+export interface SeriesPoint {
+  date: string;
+  [seriesKey: string]: string | number | null;
+}
+
+export interface DimensionSlice {
+  keys: string[];
+  rows: BreakdownRow[];
+  /** série pronta por métrica — CPA já dividido no servidor */
+  series: Record<MetricKey, SeriesPoint[]>;
+}
+
+export interface FunnelStage {
+  key: string;
+  label: string;
+  /** null = etapa que o dado atual não sustenta */
+  value: number | null;
+  /** taxa em relação à etapa anterior disponível, já calculada */
+  rateFromPrev: number | null;
+  unavailableReason?: string;
+}
+
+export interface ReportPayload {
+  meta: {
+    accountName: string;
+    clientName: string;
+    currency: string;
+    periodStart: string;
+    periodEnd: string;
+    periodDays: number;
+    generatedAt: string;
+    /** avisos herdados do import — export sem coluna de ID, etc. */
+    caveats: string[];
+  };
+  headline: {
+    totals: RawTotals;
+    metrics: DerivedMetrics;
+    sample: SampleVerdict;
+  };
+  funnel: FunnelStage[];
+  byDimension: Record<DimensionKey, DimensionSlice>;
+}
+
+/** Título padrão de um relatório novo, antes de o operador renomear. */
+export function defaultTitle(accountName: string, start: string, end: string) {
+  const br = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+  return `${accountName} — ${br(start)} a ${br(end)}`;
+}

@@ -84,6 +84,17 @@ export const factInsightsDaily = pgTable(
     spend: numeric("spend", { precision: 18, scale: 6 }).notNull().default("0"),
     reach: bigint("reach", { mode: "number" }), // só informativo por linha; NUNCA somar entre entidades
 
+    /**
+     * Cliques. Desvio consciente de docs/02, que os define `not null default 0`:
+     * aqui são NULL-áveis porque `null` ("o export não trazia a coluna") e `0`
+     * ("houve zero cliques") são fatos diferentes, e tratá-los igual faz o CTR
+     * do relatório exibir 0,00% quando a verdade é "não sei" — exatamente o erro
+     * que CLAUDE.md § 2.3 proíbe para divisão por zero.
+     */
+    clicks: bigint("clicks", { mode: "number" }), // all clicks
+    linkClicks: bigint("link_clicks", { mode: "number" }), // inline_link_clicks
+    outboundClicks: bigint("outbound_clicks", { mode: "number" }),
+
     currency: text("currency").notNull(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -122,6 +133,30 @@ export const conversionMappings = pgTable(
     uniqMapping: unique().on(t.adAccountId, t.actionType),
   })
 );
+
+/**
+ * Relatório salvo. `payload` é CONGELADO na geração (docs/02, docs/05): é o que
+ * permite responder "o relatório de agosto dizia X" mesmo depois de o Meta
+ * reajustar o dado retroativamente. Nunca recalcule um relatório salvo.
+ *
+ * Desvios conscientes de docs/02-modelo-de-dados.md:
+ *   - `definition_id` omitido: `report_definitions` ainda não existe neste corte.
+ *   - `ad_account_id` adicionado: hoje o relatório é por conta, não por cliente.
+ *   - `title` adicionado: o operador renomeia o relatório antes de salvar.
+ */
+export const reports = pgTable("reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").notNull().references(() => clients.id),
+  adAccountId: uuid("ad_account_id").notNull().references(() => adAccounts.id),
+  title: text("title").notNull(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  payload: jsonb("payload").notNull(),
+  narrative: jsonb("narrative"),
+  status: text("status").notNull().default("draft"),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+});
 
 export const importRuns = pgTable("import_runs", {
   id: uuid("id").primaryKey().defaultRandom(),

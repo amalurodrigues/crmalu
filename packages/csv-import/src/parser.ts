@@ -51,6 +51,26 @@ function extractTags(adsetName: string): string[] {
   return matches.map((m) => m[1]);
 }
 
+/**
+ * Colunas de clique. O Ads Manager varia o rótulo conforme o idioma e a versão
+ * do "Personalizar colunas", então cada métrica aceita uma lista de apelidos.
+ * Coluna ausente vira `null` (não 0) — ver RawTotals em packages/metrics.
+ */
+const CLICK_COLUMNS = {
+  linkClicks: ["Cliques no link", "Cliques em links", "Link clicks"],
+  clicks: ["Cliques (todos)", "Cliques", "Clicks (all)"],
+  outboundClicks: ["Cliques de saída", "Cliques em links de saída", "Outbound clicks"],
+} as const;
+
+function findHeader(headers: string[], candidates: readonly string[]): string | null {
+  const norm = (s: string) => s.trim().toLowerCase();
+  for (const c of candidates) {
+    const hit = headers.find((h) => norm(h) === norm(c));
+    if (hit) return hit;
+  }
+  return null;
+}
+
 const REQUIRED_ID_COLS = [
   "Identificação da campanha",
   "Identificação do conjunto de anúncios",
@@ -70,6 +90,10 @@ export interface ParsedAdRow {
   results: number;
   spend: number;
   impressions: number;
+  /** null = coluna ausente no export; 0 = houve zero cliques */
+  clicks: number | null;
+  linkClicks: number | null;
+  outboundClicks: number | null;
   reach: number; // não somar entre linhas — públicos se sobrepõem
   attributionWindow: string;
   currency: string;
@@ -112,7 +136,20 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
   const hasDay = headers.includes("Dia");
   const templateVersion = hasIds && hasDay ? "v2_id_dia" : "v1_periodo_unico";
 
+  const clickCols = {
+    clicks: findHeader(headers, CLICK_COLUMNS.clicks),
+    linkClicks: findHeader(headers, CLICK_COLUMNS.linkClicks),
+    outboundClicks: findHeader(headers, CLICK_COLUMNS.outboundClicks),
+  };
+
   const warnings: string[] = [];
+  if (!clickCols.linkClicks) {
+    warnings.push(
+      "Export sem a coluna 'Cliques no link' — sem CTR, CPC e CVR, e o funil " +
+        "fica sem a etapa entre impressão e conversa. Adicione em " +
+        "'Personalizar colunas' no Ads Manager (docs/03-ingestao-csv-meta-ads.md)."
+    );
+  }
   if (!hasIds) {
     warnings.push(
       "Export sem colunas de ID — chave natural cai para (adset::ad), " +
@@ -144,6 +181,11 @@ export function parseMetaCsvContent(rawContent: string): ParseResult {
       results: toNumber(r["Resultados"]) ?? 0,
       spend: toNumber(r[spendCol]) ?? 0,
       impressions: toNumber(r["Impressões"]) ?? 0,
+      clicks: clickCols.clicks ? toNumber(r[clickCols.clicks]) ?? 0 : null,
+      linkClicks: clickCols.linkClicks ? toNumber(r[clickCols.linkClicks]) ?? 0 : null,
+      outboundClicks: clickCols.outboundClicks
+        ? toNumber(r[clickCols.outboundClicks]) ?? 0
+        : null,
       reach: toNumber(r["Alcance"]) ?? 0,
       attributionWindow: normalizeAttribution(r["Configuração de atribuição"]),
       currency,
