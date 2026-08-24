@@ -106,7 +106,46 @@ export async function importParsedRows(
     return upserted[0].id;
   }
 
+  /**
+   * Migração de chave natural.
+   *
+   * Uma entidade importada de um export SEM IDs ficou chaveada pelo nome. Quando
+   * o MESMO anúncio reaparece num export COM IDs, inserir pela chave nova criaria
+   * uma segunda entidade e o período passaria a ser contado duas vezes.
+   *
+   * Re-chavear a linha existente resolve sem apagar nada: `fact_*` referencia o
+   * uuid da entidade, não o external_id, então todo o histórico já ingerido
+   * segue junto e continua somando uma vez só.
+   */
+  let rekeyed = 0;
+  async function rekeyIfNeeded(fallbackKey: string, realId: string | null) {
+    if (!realId || realId === fallbackKey) return;
+
+    const [alreadyReal] = await db
+      .select({ id: dimEntity.id })
+      .from(dimEntity)
+      .where(and(eq(dimEntity.adAccountId, adAccountId), eq(dimEntity.externalId, realId)))
+      .limit(1);
+    if (alreadyReal) return; // já está chaveada pelo ID; nada a migrar
+
+    const updated = await db
+      .update(dimEntity)
+      .set({ externalId: realId })
+      .where(and(eq(dimEntity.adAccountId, adAccountId), eq(dimEntity.externalId, fallbackKey)))
+      .returning({ id: dimEntity.id });
+
+    if (updated.length > 0) {
+      rekeyed++;
+      entityCache.delete(fallbackKey);
+    }
+  }
+
   for (const row of parsed.rows) {
+    // Antes de qualquer upsert: migra chaves antigas para os IDs deste export.
+    await rekeyIfNeeded(row.naturalKey, row.adId);
+    await rekeyIfNeeded(`adset::${row.adsetName}`, row.adsetId);
+    if (row.campaignName) await rekeyIfNeeded(`campaign::${row.campaignName}`, row.campaignId);
+
     /**
      * Chave natural por nível: o ID do Meta quando o export traz, o nome com
      * prefixo de nível quando não traz. O prefixo evita que a chave de um
@@ -215,6 +254,13 @@ export async function importParsedRows(
         });
       actionRowsUpserted++;
     }
+  }
+
+  if (rekeyed > 0) {
+    warnings.push(
+      `${rekeyed} entidades tiveram a chave natural migrada de nome para ID do Meta — ` +
+        "histórico preservado, sem duplicata."
+    );
   }
 
   return { entitiesUpserted, insightRowsUpserted, actionRowsUpserted, warnings };

@@ -151,8 +151,22 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       creativeLabelById.set(e.id, e.name);
       continue;
     }
+
+    /**
+     * Desambiguador mais curto que ainda separa. Nomes de conjunto costumam ser
+     * a string de tags inteira (`[Maternidade][Whatsapp][Frio]`), que enche a
+     * legenda do gráfico sem acrescentar informação — se a vertical já
+     * distingue os homônimos, ela basta e cabe na tela.
+     */
+    const homonimos = adEntities.filter((o) => o.name === e.name);
+    const verticaisDistintas = new Set(homonimos.map((o) => o.vertical ?? "")).size;
     const conjunto = e.parentExtId ? entityByExtId.get(e.parentExtId)?.name : undefined;
-    const disambiguator = conjunto ?? e.vertical ?? e.externalId.slice(-6);
+
+    const disambiguator =
+      verticaisDistintas === homonimos.length && e.vertical
+        ? e.vertical
+        : conjunto ?? e.vertical ?? e.externalId.slice(-6);
+
     creativeLabelById.set(e.id, `${e.name} · ${disambiguator}`);
   }
 
