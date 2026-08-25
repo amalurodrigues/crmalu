@@ -89,6 +89,10 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
 
   const from = opts.from && opts.from >= dataStart ? opts.from : dataStart;
   const to = opts.to && opts.to <= dataEnd ? opts.to : dataEnd;
+  // Janela do FILTRO, antes de qualquer recorte por campanha — vira meta.filterFrom/filterTo.
+  // Não usar periodStart/periodEnd (abaixo) para chavear offline_results: aqueles nascem das
+  // células já filtradas por scopedCampaign, então mudar o filtro de campanha muda a data e
+  // uma "atualização" vira linha nova, somada na próxima leitura sem filtro.
 
   const entities = await db
     .select()
@@ -455,6 +459,8 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       periodStart,
       periodEnd,
       periodDays,
+      filterFrom: from,
+      filterTo: to,
       dataStart,
       dataEnd,
       targetCpa,

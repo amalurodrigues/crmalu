@@ -101,6 +101,15 @@ export interface ReportPayload {
     periodStart: string;
     periodEnd: string;
     periodDays: number;
+    /**
+     * Janela do filtro de data, ANTES do recorte por campanha — ao contrário de
+     * periodStart/periodEnd, não muda quando o operador filtra por campanha.
+     * É o que "Resultados de negócio" deve usar para chavear offline_results:
+     * usar periodStart/periodEnd ali faz uma atualização (com filtro de
+     * campanha ativo) virar linha nova, somada na próxima leitura sem filtro.
+     */
+    filterFrom: string;
+    filterTo: string;
     /** extremos do que existe no banco — alimentam os limites do filtro */
     dataStart: string;
     dataEnd: string;

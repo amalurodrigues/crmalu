@@ -815,8 +815,8 @@ export function ReportDashboard({
                 className="glass-2 flex flex-wrap items-end gap-3 p-3"
               >
                 <input type="hidden" name="slug" value={meta.clientSlug} />
-                <input type="hidden" name="from" value={meta.periodStart} />
-                <input type="hidden" name="to" value={meta.periodEnd} />
+                <input type="hidden" name="from" value={meta.filterFrom} />
+                <input type="hidden" name="to" value={meta.filterTo} />
                 <input
                   type="hidden"
                   name="campaignExtId"
