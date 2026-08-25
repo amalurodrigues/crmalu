@@ -126,11 +126,21 @@ export interface ReportPayload {
      * que a UI precisa distinguir de "informou zero".
      */
     offlinePorCampanha: Array<{
-      campaignExtId: string | null;
+      campaignExtId: string;
       campaignName: string;
       qualifiedLeads: number | null;
       closedDeals: number | null;
     }>;
+    /**
+     * Soma de offlinePorCampanha — só exibido, nunca um campo à parte. Existiu
+     * uma versão com "conta inteira" como valor digitado independente; foi
+     * removida porque o operador esperava que batesse com a soma das campanhas,
+     * e um número solto que não conversa com o resto é o oposto de "unificado".
+     */
+    offlineTotal: {
+      qualifiedLeads: number | null;
+      closedDeals: number | null;
+    };
     generatedAt: string;
     /** avisos herdados do import — export sem coluna de ID, etc. */
     caveats: string[];

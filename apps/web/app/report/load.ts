@@ -278,9 +278,6 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       )
     );
 
-  const offlineNoEscopo = offline.filter((o) =>
-    scopedCampaign ? o.campaignExtId === scopedCampaign : true
-  );
   /** valor informado para UMA campanha (ou para a conta, com null) e uma métrica */
   const valorOffline = (campanha: string | null, chave: string): number | null => {
     const linhas = offline.filter(
@@ -290,16 +287,30 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
     return linhas.reduce((a, o) => a + Number(o.value), 0);
   };
 
-  const somaOffline = (chave: string): number | null => {
-    const linhas = offlineNoEscopo.filter((o) => o.metricKey === chave);
-    if (linhas.length === 0) return null; // ninguém informou ≠ informou zero
-    return linhas.reduce((a, o) => a + Number(o.value), 0);
+  /**
+   * Soma de uma métrica offline por TODAS as campanhas — nunca um valor
+   * informado à parte para "conta inteira". Existiu uma versão anterior com um
+   * balde separado sem atribuição de campanha; foi removida porque o operador
+   * a lia como "o total geral" e esperava que batesse com a soma das
+   * campanhas — um número digitado à parte que não conversava com o resto é
+   * o oposto disso.
+   */
+  const somaTodasCampanhas = (chave: string): number | null => {
+    const valores = campaigns
+      .map((c) => valorOffline(c.extId, chave))
+      .filter((v): v is number => v !== null);
+    if (valores.length === 0) return null; // ninguém informou ≠ informou zero
+    return valores.reduce((a, v) => a + v, 0);
   };
+
+  /** Total exibido no cabeçalho/funil: com escopo, só a campanha; sem escopo, todas. */
+  const totalOffline = (chave: string): number | null =>
+    scopedCampaign ? valorOffline(scopedCampaign, chave) : somaTodasCampanhas(chave);
 
   const grandTotals = {
     ...sumTotals(cells.map((c) => c.totals)),
-    qualifiedLeads: somaOffline("qualified_leads"),
-    closedDeals: somaOffline("closed_deals"),
+    qualifiedLeads: totalOffline("qualified_leads"),
+    closedDeals: totalOffline("closed_deals"),
   };
   const targetCpa = client.targetCpa === null ? null : Number(client.targetCpa);
 
@@ -465,20 +476,17 @@ export async function loadReportPayload(opts: LoadOptions = {}): Promise<ReportP
       dataEnd,
       targetCpa,
       campaigns,
-      offlinePorCampanha: [
-        ...campaigns.map((c) => ({
-          campaignExtId: c.extId,
-          campaignName: c.name,
-          qualifiedLeads: valorOffline(c.extId, "qualified_leads"),
-          closedDeals: valorOffline(c.extId, "closed_deals"),
-        })),
-        {
-          campaignExtId: null,
-          campaignName: "Conta inteira (sem separar por campanha)",
-          qualifiedLeads: valorOffline(null, "qualified_leads"),
-          closedDeals: valorOffline(null, "closed_deals"),
-        },
-      ],
+      offlinePorCampanha: campaigns.map((c) => ({
+        campaignExtId: c.extId,
+        campaignName: c.name,
+        qualifiedLeads: valorOffline(c.extId, "qualified_leads"),
+        closedDeals: valorOffline(c.extId, "closed_deals"),
+      })),
+      /** Soma das campanhas acima — exibido, nunca digitado à parte (ver totalOffline). */
+      offlineTotal: {
+        qualifiedLeads: somaTodasCampanhas("qualified_leads"),
+        closedDeals: somaTodasCampanhas("closed_deals"),
+      },
       campaignExtId: scopedCampaign,
       campaignName: scopedCampaign
         ? campaigns.find((c) => c.extId === scopedCampaign)?.name ?? null

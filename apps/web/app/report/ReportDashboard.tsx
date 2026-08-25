@@ -810,18 +810,14 @@ export function ReportDashboard({
           <div className="mt-4 space-y-2">
             {meta.offlinePorCampanha.map((linha) => (
               <form
-                key={linha.campaignExtId ?? "conta"}
+                key={linha.campaignExtId}
                 action={resultadosAction}
                 className="glass-2 flex flex-wrap items-end gap-3 p-3"
               >
                 <input type="hidden" name="slug" value={meta.clientSlug} />
                 <input type="hidden" name="from" value={meta.filterFrom} />
                 <input type="hidden" name="to" value={meta.filterTo} />
-                <input
-                  type="hidden"
-                  name="campaignExtId"
-                  value={linha.campaignExtId ?? ""}
-                />
+                <input type="hidden" name="campaignExtId" value={linha.campaignExtId} />
 
                 <span
                   className="min-w-0 flex-1 truncate text-xs text-ink"
@@ -870,6 +866,29 @@ export function ReportDashboard({
                 </button>
               </form>
             ))}
+
+            {/* Soma das campanhas acima — exibida, não digitada. Ver offlineTotal em load.ts. */}
+            <div className="flex flex-wrap items-center gap-3 border-t border-white/5 p-3">
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                Total (todas as campanhas)
+              </span>
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wider text-faint">
+                  Leads qualificados
+                </span>
+                <p className="tabular mt-1 w-28 text-right font-mono text-sm text-ink">
+                  {count(meta.offlineTotal.qualifiedLeads)}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wider text-faint">
+                  Vendas fechadas
+                </span>
+                <p className="tabular mt-1 w-28 text-right font-mono text-sm text-ink">
+                  {count(meta.offlineTotal.closedDeals)}
+                </p>
+              </div>
+            </div>
           </div>
 
           {(headline.metrics.cplQualified !== null || headline.metrics.cac !== null) && (
